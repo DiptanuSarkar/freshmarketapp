@@ -53,7 +53,9 @@ class HomeHeader extends ConsumerWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          'Deliver to: ${selectedAddress.tag}',
+                          selectedAddress != null
+                              ? 'Deliver to: ${selectedAddress.tag}'
+                              : 'Select Location',
                           style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w800,
@@ -68,7 +70,8 @@ class HomeHeader extends ConsumerWidget {
                       ],
                     ),
                     Text(
-                      selectedAddress.formattedAddress,
+                      selectedAddress?.formattedAddress ??
+                          'Tap to select delivery address',
                       style: const TextStyle(
                         fontSize: 11,
                         color: AppColors.textSecondary,

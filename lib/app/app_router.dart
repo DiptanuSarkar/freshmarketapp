@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../features/address/presentation/saved_addresses_screen.dart';
 import '../features/auth/presentation/forgot_password_screen.dart';
@@ -8,6 +9,7 @@ import '../features/auth/presentation/registration_screen.dart';
 import '../features/cart/presentation/cart_screen.dart';
 import '../features/catalog/presentation/categories_screen.dart';
 import '../features/checkout/presentation/checkout_screen.dart';
+import '../features/checkout/presentation/order_success_screen.dart';
 import '../features/home/presentation/home_screen.dart';
 import '../features/notifications/presentation/notifications_screen.dart';
 import '../features/orders/presentation/order_detail_screen.dart';
@@ -33,6 +35,36 @@ abstract final class AppRouter {
     navigatorKey: _rootNavigatorKey,
     initialLocation: AppRoutes.splash,
     debugLogDiagnostics: false,
+    redirect: (context, state) {
+      final session = Supabase.instance.client.auth.currentSession;
+      final loc = state.matchedLocation;
+      final isAuthRoute =
+          loc == AppRoutes.login ||
+          loc == AppRoutes.register ||
+          loc == AppRoutes.forgotPassword;
+
+      final protectedPrefixes = [
+        AppRoutes.orders,
+        AppRoutes.account,
+        AppRoutes.wallet,
+        AppRoutes.wishlist,
+        AppRoutes.addresses,
+        AppRoutes.notifications,
+        AppRoutes.checkout,
+      ];
+
+      final isProtected = protectedPrefixes.any(
+        (p) => loc == p || loc.startsWith('$p/'),
+      );
+
+      if (session == null && isProtected) {
+        return AppRoutes.login;
+      }
+      if (session != null && isAuthRoute) {
+        return AppRoutes.home;
+      }
+      return null;
+    },
     routes: [
       // Splash
       GoRoute(
@@ -138,6 +170,14 @@ abstract final class AppRouter {
         parentNavigatorKey: _rootNavigatorKey,
         path: AppRoutes.checkout,
         builder: (context, state) => const CheckoutScreen(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: AppRoutes.orderSuccess,
+        builder: (context, state) {
+          final id = state.pathParameters['orderId'] ?? '';
+          return OrderSuccessScreen(orderId: id);
+        },
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,

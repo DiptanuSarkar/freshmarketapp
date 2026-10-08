@@ -46,3 +46,20 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Environment and Credentials config
+config/dev.json
+config/*.local.json
+.env
+.env.*
+!.env.example
+
+# Supabase generated runtime and temp files
+supabase/.temp/
+supabase/.branches/
+
+# Android build outputs and keystores
+android/build/
+*.jks
+*.keystore
+key.properties

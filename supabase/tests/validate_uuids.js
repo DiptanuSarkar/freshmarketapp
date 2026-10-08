@@ -1,31 +1,39 @@
 /**
  * UUID Validation Script (Section B)
- * Verifies that every hard-coded UUID value in supabase/seed.sql and
- * supabase/tests/database/*.sql is a valid PostgreSQL hexadecimal UUID.
+ * Recursively verifies that every hard-coded UUID value across all SQL files
+ * in supabase/ (migrations, seed.sql, tests) parses as a valid PostgreSQL hexadecimal UUID [0-9a-f].
  */
 
 const fs = require('fs');
 const path = require('path');
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-// Pattern to detect string literals that look like intended UUIDs (e.g. 36 chars with dashes)
-const CANDIDATE_REGEX = /'([0-9a-zA-Z]{8}-[0-9a-zA-Z]{4}-[0-9a-zA-Z]{4}-[0-9a-zA-Z]{4}-[0-9a-zA-Z]{12})'/g;
+const UUID_HEX_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Pattern detecting 36-char hyphenated alphanumeric UUID candidates
+const CANDIDATE_REGEX = /\b([0-9a-zA-Z]{8}-[0-9a-zA-Z]{4}-[0-9a-zA-Z]{4}-[0-9a-zA-Z]{4}-[0-9a-zA-Z]{12})\b/g;
 
-const filesToAudit = [
-  path.join(__dirname, '..', 'seed.sql'),
-  path.join(__dirname, 'database', '01_schema_and_trigger_test.sql'),
-  path.join(__dirname, 'database', '02_security_and_rls_test.sql')
-];
+function findSqlFiles(dir) {
+  let results = [];
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name !== '.temp' && entry.name !== 'node_modules') {
+        results.push(...findSqlFiles(fullPath));
+      }
+    } else if (entry.name.endsWith('.sql')) {
+      results.push(fullPath);
+    }
+  }
+  return results;
+}
+
+const supabaseDir = path.resolve(__dirname, '..');
+const filesToAudit = findSqlFiles(supabaseDir);
 
 let totalUuidsChecked = 0;
 let errors = [];
 
 for (const filePath of filesToAudit) {
-  if (!fs.existsSync(filePath)) {
-    console.error(`File not found: ${filePath}`);
-    process.exit(1);
-  }
-
   const content = fs.readFileSync(filePath, 'utf8');
   const lines = content.split('\n');
 
@@ -35,7 +43,7 @@ for (const filePath of filesToAudit) {
       const candidate = match[1];
       totalUuidsChecked++;
 
-      if (!UUID_REGEX.test(candidate)) {
+      if (!UUID_HEX_REGEX.test(candidate)) {
         errors.push({
           file: path.relative(process.cwd(), filePath),
           line: lineIndex + 1,
@@ -48,8 +56,9 @@ for (const filePath of filesToAudit) {
 }
 
 console.log('================================================================');
-console.log('FreshMarket UUID Validation Audit');
+console.log('FreshMarket Comprehensive PostgreSQL UUID Validation Audit');
 console.log('================================================================');
+console.log(`Audited ${filesToAudit.length} SQL files across supabase directory.`);
 console.log(`Total candidate UUIDs audited: ${totalUuidsChecked}`);
 
 if (errors.length > 0) {
@@ -59,6 +68,6 @@ if (errors.length > 0) {
   });
   process.exit(1);
 } else {
-  console.log(`SUCCESS: All ${totalUuidsChecked} UUIDs are strictly valid hexadecimal characters [0-9a-f]!`);
+  console.log(`SUCCESS: All ${totalUuidsChecked} UUIDs across all SQL files are strictly valid hexadecimal [0-9a-f]!`);
   process.exit(0);
 }

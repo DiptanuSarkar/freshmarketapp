@@ -7,14 +7,14 @@ import '../../../app/app_routes.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/constants/app_strings.dart';
-import '../../../core/widgets/badges/status_badge.dart';
 import '../../../core/widgets/buttons/app_button.dart';
 import '../../../core/widgets/feedback/app_error_widget.dart';
+import '../../../core/widgets/feedback/app_loading_indicator.dart';
 import '../../../shared/models/product.dart';
 import '../../../shared/models/product_variant.dart';
 import '../../../shared/providers/cart_provider.dart';
-import '../../../shared/providers/products_provider.dart';
 import '../../../shared/providers/wishlist_provider.dart';
+import '../../catalog/data/catalog_repository.dart';
 
 class ProductDetailScreen extends ConsumerStatefulWidget {
   const ProductDetailScreen({super.key, required this.productId});
@@ -31,407 +31,632 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   ProductVariant? _selectedVariant;
   int _quantity = 1;
 
-  @override
-  Widget build(BuildContext context) {
-    final product = ref.watch(productByIdProvider(widget.productId));
-
-    if (product == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Product Details')),
-        body: AppErrorWidget(
-          title: 'Product not found',
-          message: 'The requested product could not be located in our catalog.',
-          retryLabel: 'Go to Catalog',
-          onRetry: () => context.go(AppRoutes.categories),
+  void _showLoginRequired(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sign In Required'),
+        content: const Text(
+          'Please sign in or create an account to save favorite cuts and add items to your cart.',
         ),
-      );
-    }
-
-    _selectedVariant ??= product.defaultVariant;
-    final isFav = ref.watch(wishlistProvider).contains(product.id);
-    final cartNotifier = ref.read(cartProvider.notifier);
-
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text(product.name, maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
-          IconButton(
-            icon: Icon(
-              isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-              color: isFav ? AppColors.accent : AppColors.textPrimary,
-            ),
-            onPressed: () =>
-                ref.read(wishlistProvider.notifier).toggle(product.id),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
           ),
-          IconButton(
-            icon: const Icon(Icons.shopping_bag_outlined),
-            onPressed: () => context.push(AppRoutes.cart),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              context.push(AppRoutes.login);
+            },
+            child: const Text('Sign In'),
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Image Gallery & Carousel Area
-                  _buildImageGallery(product),
+    );
+  }
 
-                  // Content Container
-                  Container(
-                    color: AppColors.surface,
-                    padding: const EdgeInsets.all(AppDimensions.lg),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Category & Rating Row
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  @override
+  Widget build(BuildContext context) {
+    final productAsync = ref.watch(
+      catalogProductByIdProvider(widget.productId),
+    );
+
+    return productAsync.when(
+      loading: () => Scaffold(
+        appBar: AppBar(title: const Text('Fresh Cut')),
+        body: const Center(
+          child: AppLoadingIndicator(
+            message: 'Loading fresh product details...',
+          ),
+        ),
+      ),
+      error: (err, stack) => Scaffold(
+        appBar: AppBar(title: const Text('Product Details')),
+        body: AppErrorWidget(
+          title: "Couldn't load product",
+          message: 'Please check your connection and try again.',
+          onRetry: () =>
+              ref.refresh(catalogProductByIdProvider(widget.productId)),
+        ),
+      ),
+      data: (product) {
+        if (product == null) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('Product Details')),
+            body: AppErrorWidget(
+              title: 'Product not found',
+              message:
+                  'The requested product could not be located in our catalog.',
+              retryLabel: 'Go to Catalog',
+              onRetry: () => context.go(AppRoutes.categories),
+            ),
+          );
+        }
+
+        _selectedVariant ??= product.defaultVariant;
+        final isFav = ref.watch(wishlistProvider).contains(product.id);
+        final cartNotifier = ref.read(cartProvider.notifier);
+
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          appBar: AppBar(
+            title: Text(
+              product.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            actions: [
+              IconButton(
+                icon: Icon(
+                  isFav
+                      ? Icons.favorite_rounded
+                      : Icons.favorite_border_rounded,
+                  color: isFav ? AppColors.accent : AppColors.textPrimary,
+                ),
+                onPressed: () async {
+                  final ok = await ref
+                      .read(wishlistProvider.notifier)
+                      .toggle(product.id);
+                  if (!ok && context.mounted) {
+                    _showLoginRequired(context);
+                  }
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.shopping_bag_outlined),
+                onPressed: () => context.push(AppRoutes.cart),
+              ),
+            ],
+          ),
+          body: Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Image Gallery & Carousel Area
+                      _buildImageGallery(product),
+
+                      // Content Container
+                      Container(
+                        color: AppColors.surface,
+                        padding: const EdgeInsets.all(AppDimensions.lg),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // Category & Rating Row
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  product.categorySlug.toUpperCase(),
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.primary,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: const BoxDecoration(
+                                    color: AppColors.warningContainer,
+                                    borderRadius: AppDimensions.roundedPill,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.star_rounded,
+                                        size: 14,
+                                        color: AppColors.warning,
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        product.rating.toStringAsFixed(1),
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w800,
+                                          color: Color(0xFFB45309),
+                                        ),
+                                      ),
+                                      Text(
+                                        ' (${product.reviewCount})',
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          color: AppColors.textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: AppDimensions.xs),
+
+                            // Product Name
                             Text(
-                              product.categorySlug.toUpperCase(),
+                              product.name,
                               style: const TextStyle(
-                                fontSize: 11,
+                                fontSize: 18,
                                 fontWeight: FontWeight.w800,
-                                color: AppColors.primary,
-                                letterSpacing: 0.5,
+                                color: AppColors.textPrimary,
+                                height: 1.25,
                               ),
                             ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
+                            const SizedBox(height: AppDimensions.xs),
+
+                            // Short description
+                            Text(
+                              product.shortDescription,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: AppColors.textSecondary,
+                                height: 1.35,
                               ),
-                              decoration: const BoxDecoration(
-                                color: AppColors.warningContainer,
-                                borderRadius: AppDimensions.roundedPill,
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.star_rounded,
-                                    size: 14,
-                                    color: AppColors.warning,
+                            ),
+                            const SizedBox(height: AppDimensions.md),
+
+                            // Price Container
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.baseline,
+                              textBaseline: TextBaseline.alphabetic,
+                              children: [
+                                Text(
+                                  '${AppStrings.currencySymbol}${_selectedVariant!.price.toStringAsFixed(0)}',
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.textPrimary,
                                   ),
-                                  const SizedBox(width: 3),
+                                ),
+                                if (_selectedVariant!.hasDiscount) ...[
+                                  const SizedBox(width: AppDimensions.sm),
                                   Text(
-                                    '${product.rating} (${product.reviewCount})',
+                                    '${AppStrings.currencySymbol}${_selectedVariant!.originalPrice!.toStringAsFixed(0)}',
                                     style: const TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14,
+                                      decoration: TextDecoration.lineThrough,
+                                      color: AppColors.textTertiary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(width: AppDimensions.sm),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.accentContainer,
+                                      borderRadius: AppDimensions.roundedPill,
+                                    ),
+                                    child: Text(
+                                      '${_selectedVariant!.discountPercentage}% OFF',
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.accent,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            const SizedBox(height: AppDimensions.sm),
+
+                            // Stock status
+                            Row(
+                              children: [
+                                Icon(
+                                  _selectedVariant!.isOutOfStock
+                                      ? Icons.cancel_outlined
+                                      : Icons.check_circle_outline_rounded,
+                                  size: 14,
+                                  color: _selectedVariant!.isOutOfStock
+                                      ? AppColors.error
+                                      : AppColors.success,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _selectedVariant!.isOutOfStock
+                                      ? 'Out of Stock'
+                                      : 'Fresh Stock Available (${_selectedVariant!.stock} in butchery)',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: _selectedVariant!.isOutOfStock
+                                        ? AppColors.error
+                                        : AppColors.success,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: AppDimensions.md),
+
+                      // Variant Selector Section
+                      Container(
+                        color: AppColors.surface,
+                        padding: const EdgeInsets.all(AppDimensions.lg),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Select Portion Size & Cut',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: AppDimensions.md),
+                            Wrap(
+                              spacing: AppDimensions.sm,
+                              runSpacing: AppDimensions.sm,
+                              children: product.variants.map((v) {
+                                final isSelected = v.id == _selectedVariant!.id;
+                                return ChoiceChip(
+                                  label: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        v.title,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: isSelected
+                                              ? FontWeight.bold
+                                              : FontWeight.w600,
+                                          color: isSelected
+                                              ? AppColors.primaryDark
+                                              : AppColors.textPrimary,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${AppStrings.currencySymbol}${v.price.toStringAsFixed(0)}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: isSelected
+                                              ? AppColors.primary
+                                              : AppColors.textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  selected: isSelected,
+                                  selectedColor: AppColors.primaryContainer,
+                                  backgroundColor: AppColors.surfaceSubtle,
+                                  side: BorderSide(
+                                    color: isSelected
+                                        ? AppColors.primary
+                                        : AppColors.surfaceBorder,
+                                    width: isSelected ? 1.5 : 1.0,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  onSelected: (val) {
+                                    if (val) {
+                                      setState(() => _selectedVariant = v);
+                                    }
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: AppDimensions.md),
+
+                      // Butchery & Product Highlights
+                      Container(
+                        color: AppColors.surface,
+                        padding: const EdgeInsets.all(AppDimensions.lg),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Butchery Specification',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: AppDimensions.md),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: [
+                                if (_selectedVariant!.netWeightDisplay != null)
+                                  _buildHighlightItem(
+                                    Icons.scale_outlined,
+                                    _selectedVariant!.netWeightDisplay!,
+                                    'Net Weight',
+                                  ),
+                                if (_selectedVariant!.grossWeightDisplay !=
+                                    null)
+                                  _buildHighlightItem(
+                                    Icons.kitchen_outlined,
+                                    _selectedVariant!.grossWeightDisplay!,
+                                    'Gross Weight',
+                                  ),
+                                if (_selectedVariant!.piecesCount != null)
+                                  _buildHighlightItem(
+                                    Icons.grid_view_rounded,
+                                    _selectedVariant!.piecesCount!,
+                                    'Portions',
+                                  ),
+                                if (_selectedVariant!.serves != null)
+                                  _buildHighlightItem(
+                                    Icons.people_outline_rounded,
+                                    _selectedVariant!.serves!,
+                                    'Serves',
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: AppDimensions.md),
+
+                      // Description & Butchery Process
+                      if (product.description.isNotEmpty)
+                        Container(
+                          color: AppColors.surface,
+                          padding: const EdgeInsets.all(AppDimensions.lg),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'About this Cut',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: AppDimensions.sm),
+                              Text(
+                                product.description,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.textSecondary,
+                                  height: 1.45,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      const SizedBox(height: AppDimensions.md),
+
+                      // Storage & Freshness Instructions
+                      if (product.storageInstructions != null)
+                        Container(
+                          color: AppColors.surface,
+                          padding: const EdgeInsets.all(AppDimensions.lg),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Row(
+                                children: [
+                                  Icon(
+                                    Icons.ac_unit_rounded,
+                                    size: 16,
+                                    color: AppColors.primary,
+                                  ),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Cold-Chain & Storage Instructions',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w800,
                                       color: AppColors.textPrimary,
                                     ),
                                   ),
                                 ],
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: AppDimensions.xs),
-
-                        // Title
-                        Text(
-                          product.name,
-                          style: Theme.of(context).textTheme.headlineMedium
-                              ?.copyWith(fontWeight: FontWeight.w800),
-                        ),
-                        const SizedBox(height: AppDimensions.xs),
-
-                        // Short description
-                        Text(
-                          product.shortDescription,
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                        const SizedBox(height: AppDimensions.md),
-
-                        // Price & Discount Row
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.baseline,
-                          textBaseline: TextBaseline.alphabetic,
-                          children: [
-                            Text(
-                              '${AppStrings.currencySymbol}${_selectedVariant!.price.toStringAsFixed(0)}',
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                            if (_selectedVariant!.hasDiscount) ...[
-                              const SizedBox(width: AppDimensions.sm),
+                              const SizedBox(height: AppDimensions.sm),
                               Text(
-                                '${AppStrings.currencySymbol}${_selectedVariant!.originalPrice!.toStringAsFixed(0)}',
+                                product.storageInstructions!,
                                 style: const TextStyle(
-                                  fontSize: 15,
-                                  decoration: TextDecoration.lineThrough,
-                                  color: AppColors.textTertiary,
+                                  fontSize: 13,
+                                  color: AppColors.textSecondary,
+                                  height: 1.4,
                                 ),
                               ),
-                              const SizedBox(width: AppDimensions.sm),
-                              StatusBadge(
-                                label:
-                                    '${_selectedVariant!.discountPercentage}% OFF',
-                                variant: BadgeVariant.accent,
-                              ),
                             ],
-                            const Spacer(),
-                            StatusBadge(
-                              label: _selectedVariant!.isOutOfStock
-                                  ? 'Out of Stock'
-                                  : 'In Stock',
-                              variant: _selectedVariant!.isOutOfStock
-                                  ? BadgeVariant.error
-                                  : BadgeVariant.success,
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: AppDimensions.sm),
-
-                  // Variant Selection Area
-                  Container(
-                    width: double.infinity,
-                    color: AppColors.surface,
-                    padding: const EdgeInsets.all(AppDimensions.lg),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Select Weight / Variant',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
                           ),
                         ),
-                        const SizedBox(height: AppDimensions.md),
-                        Wrap(
-                          spacing: AppDimensions.sm,
-                          runSpacing: AppDimensions.sm,
-                          children: product.variants.map((v) {
-                            final isSelected = v.id == _selectedVariant!.id;
-                            return ChoiceChip(
-                              label: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                      const SizedBox(height: AppDimensions.md),
+
+                      // Cooking Suggestions
+                      if (product.cookingSuggestions != null)
+                        Container(
+                          color: AppColors.surface,
+                          padding: const EdgeInsets.all(AppDimensions.lg),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Row(
                                 children: [
-                                  Text(v.title),
+                                  Icon(
+                                    Icons.soup_kitchen_rounded,
+                                    size: 16,
+                                    color: AppColors.accent,
+                                  ),
+                                  SizedBox(width: 6),
                                   Text(
-                                    '${AppStrings.currencySymbol}${v.price.toStringAsFixed(0)}',
+                                    'Chef Cooking Suggestions',
                                     style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: isSelected
-                                          ? AppColors.primaryDark
-                                          : AppColors.textSecondary,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.textPrimary,
                                     ),
                                   ),
                                 ],
                               ),
-                              selected: isSelected,
-                              selectedColor: AppColors.primaryContainer,
-                              backgroundColor: AppColors.surfaceSubtle,
-                              side: BorderSide(
-                                color: isSelected
-                                    ? AppColors.primary
-                                    : AppColors.surfaceBorder,
-                                width: 1.5,
-                              ),
-                              onSelected: (selected) {
-                                if (selected) {
-                                  setState(() => _selectedVariant = v);
-                                }
-                              },
-                            );
-                          }).toList(),
-                        ),
-                        if (_selectedVariant?.netWeightDisplay != null) ...[
-                          const SizedBox(height: AppDimensions.sm),
-                          Text(
-                            _selectedVariant!.netWeightDisplay!,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: AppDimensions.sm),
-
-                  // Highlights / Cuts Info
-                  Container(
-                    color: AppColors.surface,
-                    padding: const EdgeInsets.all(AppDimensions.lg),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _buildHighlightItem(
-                          Icons.pie_chart_outline_rounded,
-                          product.pieces,
-                          'Pieces',
-                        ),
-                        _buildHighlightItem(
-                          Icons.groups_outlined,
-                          product.servings,
-                          'Portion',
-                        ),
-                        _buildHighlightItem(
-                          Icons.ac_unit_rounded,
-                          '0-4° C',
-                          'Chilled Fresh',
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: AppDimensions.sm),
-
-                  // Detailed Description
-                  Container(
-                    width: double.infinity,
-                    color: AppColors.surface,
-                    padding: const EdgeInsets.all(AppDimensions.lg),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Product Details & Source',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: AppDimensions.sm),
-                        Text(
-                          product.description,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(height: 1.5),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: AppDimensions.xxxl),
-                ],
-              ),
-            ),
-          ),
-
-          // Bottom Action Bar (Quantity controls + Add to Cart + Buy Now)
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppDimensions.lg,
-              vertical: AppDimensions.md,
-            ),
-            decoration: const BoxDecoration(
-              color: AppColors.surface,
-              border: Border(
-                top: BorderSide(color: AppColors.surfaceBorder, width: 1),
-              ),
-              boxShadow: AppDimensions.cardShadow,
-            ),
-            child: SafeArea(
-              top: false,
-              child: Row(
-                children: [
-                  // Quantity Stepper
-                  Container(
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceSubtle,
-                      borderRadius: AppDimensions.roundedMd,
-                      border: Border.all(color: AppColors.surfaceBorder),
-                    ),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.remove, size: 16),
-                          onPressed: _quantity > 1
-                              ? () => setState(() => _quantity--)
-                              : null,
-                        ),
-                        Text(
-                          '$_quantity',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.add, size: 16),
-                          onPressed: () => setState(() => _quantity++),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: AppDimensions.md),
-
-                  // Add to Cart Button
-                  Expanded(
-                    child: AppButton(
-                      label: AppStrings.addToCart,
-                      variant: AppButtonVariant.outline,
-                      height: 44,
-                      onPressed: _selectedVariant!.isOutOfStock
-                          ? null
-                          : () {
-                              cartNotifier.addItem(
-                                product,
-                                _selectedVariant!,
-                                qty: _quantity,
-                              );
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    'Added $_quantity x ${product.name} to cart',
-                                  ),
-                                  backgroundColor: AppColors.primary,
-                                  duration: const Duration(seconds: 2),
-                                  action: SnackBarAction(
-                                    label: 'View Cart',
-                                    textColor: Colors.white,
-                                    onPressed: () =>
-                                        context.push(AppRoutes.cart),
-                                  ),
+                              const SizedBox(height: AppDimensions.sm),
+                              Text(
+                                product.cookingSuggestions!,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.textSecondary,
+                                  height: 1.4,
                                 ),
-                              );
-                            },
-                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      const SizedBox(height: AppDimensions.xxxl),
+                    ],
                   ),
-                  const SizedBox(width: AppDimensions.sm),
-
-                  // Buy Now Button
-                  Expanded(
-                    child: AppButton(
-                      label: AppStrings.buyNow,
-                      variant: AppButtonVariant.primary,
-                      height: 44,
-                      onPressed: _selectedVariant!.isOutOfStock
-                          ? null
-                          : () {
-                              cartNotifier.addItem(
-                                product,
-                                _selectedVariant!,
-                                qty: _quantity,
-                              );
-                              context.push(AppRoutes.cart);
-                            },
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
+
+              // Bottom Action Bar
+              Container(
+                padding: const EdgeInsets.all(AppDimensions.lg),
+                decoration: const BoxDecoration(
+                  color: AppColors.surface,
+                  border: Border(
+                    top: BorderSide(color: AppColors.surfaceBorder, width: 1),
+                  ),
+                  boxShadow: AppDimensions.cardShadow,
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: Row(
+                    children: [
+                      // Quantity Stepper
+                      Container(
+                        decoration: BoxDecoration(
+                          borderRadius: AppDimensions.roundedMd,
+                          border: Border.all(color: AppColors.surfaceBorder),
+                        ),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.remove, size: 16),
+                              onPressed: _quantity > 1
+                                  ? () => setState(() => _quantity--)
+                                  : null,
+                            ),
+                            Text(
+                              '$_quantity',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.add, size: 16),
+                              onPressed: () => setState(() => _quantity++),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: AppDimensions.md),
+
+                      // Add to Cart Button
+                      Expanded(
+                        child: AppButton(
+                          label: AppStrings.addToCart,
+                          variant: AppButtonVariant.outline,
+                          height: 44,
+                          onPressed: _selectedVariant!.isOutOfStock
+                              ? null
+                              : () async {
+                                  final ok = await cartNotifier.addItem(
+                                    product,
+                                    _selectedVariant!,
+                                    qty: _quantity,
+                                  );
+                                  if (!ok && context.mounted) {
+                                    _showLoginRequired(context);
+                                  } else if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          'Added $_quantity x ${product.name} to cart',
+                                        ),
+                                        backgroundColor: AppColors.primary,
+                                        duration: const Duration(seconds: 2),
+                                        action: SnackBarAction(
+                                          label: 'View Cart',
+                                          textColor: Colors.white,
+                                          onPressed: () =>
+                                              context.push(AppRoutes.cart),
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
+                        ),
+                      ),
+                      const SizedBox(width: AppDimensions.sm),
+
+                      // Buy Now Button
+                      Expanded(
+                        child: AppButton(
+                          label: AppStrings.buyNow,
+                          variant: AppButtonVariant.primary,
+                          height: 44,
+                          onPressed: _selectedVariant!.isOutOfStock
+                              ? null
+                              : () async {
+                                  final ok = await cartNotifier.addItem(
+                                    product,
+                                    _selectedVariant!,
+                                    qty: _quantity,
+                                  );
+                                  if (!ok && context.mounted) {
+                                    _showLoginRequired(context);
+                                  } else if (context.mounted) {
+                                    context.push(AppRoutes.cart);
+                                  }
+                                },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -439,13 +664,13 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     return Column(
       children: [
         SizedBox(
-          height: 260,
+          height: 240,
           child: PageView.builder(
             itemCount: product.images.length,
             onPageChanged: (idx) => setState(() => _selectedImageIndex = idx),
-            itemBuilder: (context, index) {
+            itemBuilder: (context, idx) {
               return CachedNetworkImage(
-                imageUrl: product.images[index],
+                imageUrl: product.images[idx],
                 fit: BoxFit.cover,
                 placeholder: (context, url) =>
                     Container(color: AppColors.surfaceSubtle),

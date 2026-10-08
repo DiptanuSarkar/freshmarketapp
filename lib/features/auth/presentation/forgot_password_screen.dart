@@ -1,38 +1,60 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/widgets/buttons/app_button.dart';
 import '../../../core/widgets/inputs/app_text_field.dart';
+import '../data/auth_provider.dart';
 
-class ForgotPasswordScreen extends StatefulWidget {
+class ForgotPasswordScreen extends ConsumerStatefulWidget {
   const ForgotPasswordScreen({super.key});
 
   @override
-  State<ForgotPasswordScreen> createState() => _ForgotPasswordScreenState();
+  ConsumerState<ForgotPasswordScreen> createState() =>
+      _ForgotPasswordScreenState();
 }
 
-class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
-  final _emailPhoneController = TextEditingController();
+class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
+  final _emailController = TextEditingController();
   bool _isSent = false;
   bool _isLoading = false;
 
   @override
   void dispose() {
-    _emailPhoneController.dispose();
+    _emailController.dispose();
     super.dispose();
   }
 
-  void _handleReset() {
+  Future<void> _handleReset() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your email address.')),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
-    Future.delayed(const Duration(milliseconds: 600), () {
+    try {
+      await ref.read(authNotifierProvider.notifier).resetPassword(email: email);
       if (mounted) {
         setState(() {
           _isLoading = false;
           _isSent = true;
         });
       }
-    });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -54,14 +76,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 ),
                 const SizedBox(height: AppDimensions.sm),
                 Text(
-                  'Enter your registered email address or phone number. We\'ll send you a password recovery link or OTP.',
+                  'Enter your registered email address. We\'ll send you a password recovery link.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: AppDimensions.xxl),
 
                 AppTextField(
-                  controller: _emailPhoneController,
-                  label: 'Registered Email or Phone',
+                  controller: _emailController,
+                  label: 'Registered Email Address',
                   hint: 'e.g. name@example.com',
                   prefixIcon: const Icon(
                     Icons.mail_outline_rounded,
@@ -74,7 +96,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
                 AppButton(
                   label: 'Send Recovery Link',
-                  onPressed: _handleReset,
+                  onPressed: _isLoading ? null : _handleReset,
                   isLoading: _isLoading,
                   width: double.infinity,
                 ),
@@ -104,7 +126,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       ),
                       const SizedBox(height: AppDimensions.sm),
                       Text(
-                        'We have dispatched instructions to your contact. Follow the link to reset your account password.',
+                        'We have dispatched instructions to ${_emailController.text.trim()}. Follow the link to reset your account password.',
                         style: Theme.of(context).textTheme.bodyMedium,
                         textAlign: TextAlign.center,
                       ),

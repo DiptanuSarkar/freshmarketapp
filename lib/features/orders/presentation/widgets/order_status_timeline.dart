@@ -19,6 +19,49 @@ class OrderStatusTimeline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (currentStatus == OrderStatus.paymentPending) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.warningContainer,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Row(
+          children: [
+            Icon(
+              Icons.hourglass_top_rounded,
+              color: AppColors.warning,
+              size: 20,
+            ),
+            SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Awaiting Payment',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Complete payment within 15 minutes to confirm your order.',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     if (currentStatus == OrderStatus.cancelled) {
       return Container(
         padding: const EdgeInsets.all(12),
@@ -31,7 +74,7 @@ class OrderStatusTimeline extends StatelessWidget {
             Icon(Icons.cancel_outlined, color: AppColors.error, size: 20),
             SizedBox(width: 8),
             Text(
-              'This order was cancelled and refunded to wallet.',
+              'This order was cancelled.',
               style: TextStyle(
                 color: AppColors.error,
                 fontSize: 12,

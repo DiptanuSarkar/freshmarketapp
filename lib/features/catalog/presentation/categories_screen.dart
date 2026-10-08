@@ -1,19 +1,23 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/app_routes.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
-import '../../../shared/data/mock_data.dart';
+import '../../../core/widgets/feedback/app_empty_state.dart';
+import '../../../core/widgets/feedback/app_error_widget.dart';
+import '../../../core/widgets/feedback/app_loading_indicator.dart';
 import '../../../shared/models/category.dart';
+import '../data/catalog_repository.dart';
 
-class CategoriesScreen extends StatelessWidget {
+class CategoriesScreen extends ConsumerWidget {
   const CategoriesScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final categories = MockData.categories;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final categoriesAsync = ref.watch(catalogCategoriesProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -26,14 +30,43 @@ class CategoriesScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: ListView.separated(
-        padding: const EdgeInsets.all(AppDimensions.lg),
-        itemCount: categories.length,
-        separatorBuilder: (context, index) =>
-            const SizedBox(height: AppDimensions.md),
-        itemBuilder: (context, index) {
-          final cat = categories[index];
-          return _buildCategoryCard(context, cat);
+      body: categoriesAsync.when(
+        loading: () => const Center(
+          child: AppLoadingIndicator(message: 'Loading fresh categories...'),
+        ),
+        error: (err, stack) => AppErrorWidget(
+          title: "Couldn't load categories",
+          message: 'Please check your connection and try again.',
+          onRetry: () => ref.refresh(catalogCategoriesProvider),
+        ),
+        data: (categories) {
+          if (categories.isEmpty) {
+            return AppEmptyState(
+              title: 'No Categories Available',
+              message:
+                  'Check back shortly for freshly updated butcher categories.',
+              icon: Icons.category_outlined,
+              actionLabel: 'Refresh',
+              onAction: () => ref.refresh(catalogCategoriesProvider),
+            );
+          }
+
+          return RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(catalogCategoriesProvider);
+              await ref.read(catalogCategoriesProvider.future);
+            },
+            child: ListView.separated(
+              padding: const EdgeInsets.all(AppDimensions.lg),
+              itemCount: categories.length,
+              separatorBuilder: (context, index) =>
+                  const SizedBox(height: AppDimensions.md),
+              itemBuilder: (context, index) {
+                final cat = categories[index];
+                return _buildCategoryCard(context, cat);
+              },
+            ),
+          );
         },
       ),
     );
@@ -59,15 +92,28 @@ class CategoriesScreen extends StatelessWidget {
             SizedBox(
               width: 104,
               height: 104,
-              child: CachedNetworkImage(
-                imageUrl: category.imageUrl,
-                fit: BoxFit.cover,
-                placeholder: (context, url) =>
-                    Container(color: AppColors.surfaceSubtle),
-                errorWidget: (context, url, error) => const Center(
-                  child: Icon(Icons.restaurant, color: AppColors.textTertiary),
-                ),
-              ),
+              child: category.imageUrl.isNotEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: category.imageUrl,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) =>
+                          Container(color: AppColors.surfaceSubtle),
+                      errorWidget: (context, url, error) => const Center(
+                        child: Icon(
+                          Icons.restaurant,
+                          color: AppColors.textTertiary,
+                        ),
+                      ),
+                    )
+                  : Container(
+                      color: AppColors.surfaceSubtle,
+                      child: const Center(
+                        child: Icon(
+                          Icons.restaurant,
+                          color: AppColors.textTertiary,
+                        ),
+                      ),
+                    ),
             ),
 
             // Middle Content

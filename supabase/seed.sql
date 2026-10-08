@@ -11,8 +11,10 @@ INSERT INTO auth.users (
   aud,
   role,
   email,
+  phone,
   encrypted_password,
   email_confirmed_at,
+  phone_confirmed_at,
   raw_app_meta_data,
   raw_user_meta_data,
   created_at,
@@ -24,7 +26,9 @@ INSERT INTO auth.users (
     'authenticated',
     'authenticated',
     'admin@freshmarket.com',
+    '+919876543200',
     crypt('password123', gen_salt('bf')),
+    now(),
     now(),
     '{"provider":"email","providers":["email"]}',
     '{"full_name":"Store Administrator"}',
@@ -37,7 +41,9 @@ INSERT INTO auth.users (
     'authenticated',
     'authenticated',
     'alice@freshmarket.com',
+    '+919876543210',
     crypt('password123', gen_salt('bf')),
+    now(),
     now(),
     '{"provider":"email","providers":["email"]}',
     '{"full_name":"Alice Customer"}',
@@ -50,7 +56,9 @@ INSERT INTO auth.users (
     'authenticated',
     'authenticated',
     'bob@freshmarket.com',
+    '+919876543211',
     crypt('password123', gen_salt('bf')),
+    now(),
     now(),
     '{"provider":"email","providers":["email"]}',
     '{"full_name":"Bob Customer"}',
@@ -63,7 +71,9 @@ INSERT INTO auth.users (
     'authenticated',
     'authenticated',
     'delivery@freshmarket.com',
+    '+919876543212',
     crypt('password123', gen_salt('bf')),
+    now(),
     now(),
     '{"provider":"email","providers":["email"]}',
     '{"full_name":"Dave Delivery Agent"}',
@@ -80,15 +90,6 @@ VALUES
   ('11111111-0000-0000-0000-000000000001', 'admin'::public.app_role),
   ('44444444-0000-0000-0000-000000000001', 'delivery_agent'::public.app_role)
 ON CONFLICT (user_id, role) DO NOTHING;
-
--- Ensure profile details are set
-UPDATE public.profiles
-SET phone = '+919876543210'
-WHERE id = '22222222-0000-0000-0000-000000000001';
-
-UPDATE public.profiles
-SET phone = '+919876543211'
-WHERE id = '33333333-0000-0000-0000-000000000002';
 
 -- 3. Seed Service Areas
 INSERT INTO public.service_areas (id, name, pincode, city, is_active, delivery_charge, min_order_for_free_delivery)
@@ -241,6 +242,7 @@ INSERT INTO public.product_variants (
   id,
   product_id,
   name,
+  sku,
   weight,
   price,
   discounted_price,
@@ -255,6 +257,7 @@ INSERT INTO public.product_variants (
     'b1000000-0000-0000-0000-000000000001',
     'a1000000-0000-0000-0000-000000000001',
     '500g Pack',
+    'CHK-CURRY-500',
     '500g',
     180.00,
     155.00,
@@ -269,6 +272,7 @@ INSERT INTO public.product_variants (
     'b1000000-0000-0000-0000-000000000002',
     'a1000000-0000-0000-0000-000000000001',
     '1kg Value Pack',
+    'CHK-CURRY-1000',
     '1000g',
     350.00,
     299.00,
@@ -283,6 +287,7 @@ INSERT INTO public.product_variants (
     'b1000000-0000-0000-0000-000000000003',
     'a1000000-0000-0000-0000-000000000002',
     '500g Fillet',
+    'CHK-BREAST-500',
     '500g',
     240.00,
     210.00,
@@ -297,6 +302,7 @@ INSERT INTO public.product_variants (
     'b1000000-0000-0000-0000-000000000004',
     'a1000000-0000-0000-0000-000000000003',
     '500g Curry Cut',
+    'MUT-CURRY-500',
     '500g',
     490.00,
     460.00,
@@ -311,6 +317,7 @@ INSERT INTO public.product_variants (
     'b1000000-0000-0000-0000-000000000005',
     'a1000000-0000-0000-0000-000000000004',
     '500g Steaks',
+    'FSH-SEER-500',
     '500g',
     550.00,
     499.00,
@@ -325,6 +332,7 @@ INSERT INTO public.product_variants (
     'b1000000-0000-0000-0000-000000000006',
     'a1000000-0000-0000-0000-000000000005',
     'Pack of 12',
+    'EGG-BROWN-12',
     '12 pcs',
     120.00,
     105.00,

@@ -6,8 +6,9 @@ import '../../../app/app_routes.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/widgets/feedback/app_empty_state.dart';
-import '../../../shared/data/mock_data.dart';
-import '../../../shared/providers/products_provider.dart';
+import '../../../core/widgets/feedback/app_error_widget.dart';
+import '../../../core/widgets/feedback/app_loading_indicator.dart';
+import '../../catalog/data/catalog_repository.dart';
 import 'widgets/product_card.dart';
 
 class ProductListScreen extends ConsumerStatefulWidget {
@@ -30,14 +31,17 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final products = ref.watch(categoryProductsProvider(_activeCategorySlug));
+    final categoriesAsync = ref.watch(catalogCategoriesProvider);
+    final categories = categoriesAsync.value ?? const [];
+
+    final productsAsync = ref.watch(
+      catalogCategoryProductsProvider(_activeCategorySlug),
+    );
 
     String pageTitle = 'All Fresh Products';
     if (_activeCategorySlug != 'all') {
       try {
-        final cat = MockData.categories.firstWhere(
-          (c) => c.slug == _activeCategorySlug,
-        );
+        final cat = categories.firstWhere((c) => c.slug == _activeCategorySlug);
         pageTitle = cat.name;
       } catch (_) {
         pageTitle = _activeCategorySlug.toUpperCase();
@@ -70,7 +74,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
               scrollDirection: Axis.horizontal,
               children: [
                 _buildCategoryFilterChip('All Products', 'all'),
-                ...MockData.categories.map(
+                ...categories.map(
                   (c) => _buildCategoryFilterChip(c.name, c.slug),
                 ),
               ],
@@ -80,15 +84,41 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
 
           // Product Grid
           Expanded(
-            child: products.isEmpty
-                ? AppEmptyState(
+            child: productsAsync.when(
+              loading: () => const Center(
+                child: AppLoadingIndicator(
+                  message: 'Loading fresh products...',
+                ),
+              ),
+              error: (err, stack) => AppErrorWidget(
+                title: "Couldn't load products",
+                message: 'Please check your connection and try again.',
+                onRetry: () => ref.refresh(
+                  catalogCategoryProductsProvider(_activeCategorySlug),
+                ),
+              ),
+              data: (products) {
+                if (products.isEmpty) {
+                  return AppEmptyState(
                     title: 'No products in this category',
-                    message: 'We are restocking fresh cuts soon. Check other categories!',
+                    message: 'Fresh stock is sourced and cut daily. Check other categories!',
                     icon: Icons.inventory_2_outlined,
-                    actionLabel: 'Browse All',
+                    actionLabel: 'View All Cuts',
                     onAction: () => setState(() => _activeCategorySlug = 'all'),
-                  )
-                : LayoutBuilder(
+                  );
+                }
+
+                return RefreshIndicator(
+                  onRefresh: () async {
+                    ref.invalidate(
+                      catalogCategoryProductsProvider(_activeCategorySlug),
+                    );
+                    await ref.read(
+                      catalogCategoryProductsProvider(_activeCategorySlug)
+                          .future,
+                    );
+                  },
+                  child: LayoutBuilder(
                     builder: (context, constraints) {
                       final crossAxisCount = constraints.maxWidth > 600 ? 3 : 2;
                       return GridView.builder(
@@ -110,6 +140,9 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                       );
                     },
                   ),
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -120,27 +153,25 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
     final isSelected = _activeCategorySlug == slug;
     return Padding(
       padding: const EdgeInsets.only(right: AppDimensions.sm),
-      child: Center(
-        child: ChoiceChip(
-          label: Text(label),
-          selected: isSelected,
-          selectedColor: AppColors.primaryContainer,
-          backgroundColor: AppColors.surfaceSubtle,
-          labelStyle: TextStyle(
-            color: isSelected ? AppColors.primary : AppColors.textSecondary,
-            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-            fontSize: 12,
-          ),
-          side: BorderSide(
-            color: isSelected ? AppColors.primary : Colors.transparent,
-            width: 1,
-          ),
-          onSelected: (selected) {
-            if (selected) {
-              setState(() => _activeCategorySlug = slug);
-            }
-          },
+      child: FilterChip(
+        label: Text(label),
+        selected: isSelected,
+        selectedColor: AppColors.primaryContainer,
+        backgroundColor: AppColors.surfaceSubtle,
+        checkmarkColor: AppColors.primary,
+        labelStyle: TextStyle(
+          fontSize: 12,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+          color: isSelected ? AppColors.primaryDark : AppColors.textSecondary,
         ),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        side: BorderSide(
+          color: isSelected ? AppColors.primary : Colors.transparent,
+          width: 1,
+        ),
+        onSelected: (_) {
+          setState(() => _activeCategorySlug = slug);
+        },
       ),
     );
   }

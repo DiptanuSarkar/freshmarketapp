@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/widgets/feedback/app_empty_state.dart';
+import '../../../core/widgets/feedback/app_error_widget.dart';
+import '../../../core/widgets/feedback/app_loading_indicator.dart';
 import '../../../core/widgets/inputs/app_search_field.dart';
 import '../../../shared/providers/products_provider.dart';
 import '../../product/presentation/widgets/product_card.dart';
@@ -17,6 +21,7 @@ class SearchScreen extends ConsumerStatefulWidget {
 
 class _SearchScreenState extends ConsumerState<SearchScreen> {
   final _searchController = TextEditingController();
+  Timer? _debounce;
 
   static const List<String> trendingSearches = [
     'Chicken Curry Cut',
@@ -24,24 +29,42 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     'Seer Fish',
     'Farm Eggs',
     'Pork Chops',
-    'Meat Masala',
+    'Masala',
   ];
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
+  void _onQueryChanged(String val) {
+    ref.read(searchQueryProvider.notifier).setQuery(val);
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      if (mounted) {
+        ref.read(debouncedSearchQueryProvider.notifier).setQuery(val);
+      }
+    });
+  }
+
   void _onChipSelected(String keyword) {
     _searchController.text = keyword;
-    ref.read(searchQueryProvider.notifier).setQuery(keyword);
+    _onQueryChanged(keyword);
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    _debounce?.cancel();
+    ref.read(searchQueryProvider.notifier).setQuery('');
+    ref.read(debouncedSearchQueryProvider.notifier).setQuery('');
   }
 
   @override
   Widget build(BuildContext context) {
-    final searchResults = ref.watch(searchResultsProvider);
     final currentQuery = ref.watch(searchQueryProvider);
+    final searchAsync = ref.watch(searchResultsFutureProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -52,12 +75,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           child: AppSearchField(
             controller: _searchController,
             autofocus: true,
-            onChanged: (val) {
-              ref.read(searchQueryProvider.notifier).setQuery(val);
-            },
-            onClear: () {
-              ref.read(searchQueryProvider.notifier).setQuery('');
-            },
+            onChanged: _onQueryChanged,
+            onClear: _clearSearch,
           ),
         ),
       ),
@@ -119,41 +138,52 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           ),
           const Divider(height: 1),
 
-          // Results Grid
+          // Results Grid with Loading / Error / Empty States
           Expanded(
-            child: searchResults.isEmpty
-                ? AppEmptyState(
+            child: searchAsync.when(
+              loading: () => const Center(
+                child: AppLoadingIndicator(message: 'Searching fresh cuts...'),
+              ),
+              error: (err, stack) => AppErrorWidget(
+                title: "Couldn't load search results",
+                message: 'Please check your connection and try again.',
+                onRetry: () => ref.refresh(searchResultsFutureProvider),
+              ),
+              data: (products) {
+                if (products.isEmpty) {
+                  return AppEmptyState(
                     title: 'No matching cuts found',
                     message: 'Try searching with general terms like "chicken", "fish", or "mutton".',
                     icon: Icons.search_off_rounded,
                     actionLabel: 'Clear Search',
-                    onAction: () {
-                      _searchController.clear();
-                      ref.read(searchQueryProvider.notifier).setQuery('');
-                    },
-                  )
-                : LayoutBuilder(
-                    builder: (context, constraints) {
-                      final crossAxisCount = constraints.maxWidth > 600 ? 3 : 2;
-                      return GridView.builder(
-                        padding: const EdgeInsets.all(AppDimensions.lg),
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: crossAxisCount,
-                          childAspectRatio: 0.62,
-                          crossAxisSpacing: AppDimensions.md,
-                          mainAxisSpacing: AppDimensions.md,
-                        ),
-                        itemCount: searchResults.length,
-                        itemBuilder: (context, index) {
-                          final product = searchResults[index];
-                          return ProductCard(
-                            product: product,
-                            width: double.infinity,
-                          );
-                        },
-                      );
-                    },
-                  ),
+                    onAction: _clearSearch,
+                  );
+                }
+
+                return LayoutBuilder(
+                  builder: (context, constraints) {
+                    final crossAxisCount = constraints.maxWidth > 600 ? 3 : 2;
+                    return GridView.builder(
+                      padding: const EdgeInsets.all(AppDimensions.lg),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: crossAxisCount,
+                        childAspectRatio: 0.62,
+                        crossAxisSpacing: AppDimensions.md,
+                        mainAxisSpacing: AppDimensions.md,
+                      ),
+                      itemCount: products.length,
+                      itemBuilder: (context, index) {
+                        final product = products[index];
+                        return ProductCard(
+                          product: product,
+                          width: double.infinity,
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            ),
           ),
         ],
       ),

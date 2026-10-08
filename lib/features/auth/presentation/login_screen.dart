@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/app_routes.dart';
@@ -6,35 +7,96 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/widgets/buttons/app_button.dart';
 import '../../../core/widgets/inputs/app_text_field.dart';
+import '../data/auth_provider.dart';
 
-class LoginScreen extends StatefulWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
-  final _emailPhoneController = TextEditingController();
+class _LoginScreenState extends ConsumerState<LoginScreen> {
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isLoading = false;
 
   @override
   void dispose() {
-    _emailPhoneController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
-  void _handleLogin() {
+  Future<void> _handleLogin() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your email address.')),
+      );
+      return;
+    }
+    if (password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your password.')),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
-    Future.delayed(const Duration(milliseconds: 700), () {
+    try {
+      await ref
+          .read(authNotifierProvider.notifier)
+          .signInWithEmailAndPassword(email: email, password: password);
       if (mounted) {
         setState(() => _isLoading = false);
         context.go(AppRoutes.home);
       }
-    });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString()),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    setState(() => _isLoading = true);
+    try {
+      await ref.read(authNotifierProvider.notifier).signInWithGoogle();
+      if (mounted) {
+        setState(() => _isLoading = false);
+        context.go(AppRoutes.home);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Google Sign-In Configuration'),
+            content: Text(
+              'Google OAuth requires Supabase Dashboard / Google Cloud credentials configuration for Android.\n\n$e',
+              style: const TextStyle(fontSize: 13),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -88,11 +150,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
               // Form fields
               AppTextField(
-                controller: _emailPhoneController,
-                label: 'Phone Number or Email',
-                hint: 'e.g. 9876543210 or name@example.com',
+                controller: _emailController,
+                label: 'Email Address',
+                hint: 'e.g. name@example.com',
                 prefixIcon: const Icon(
-                  Icons.person_outline_rounded,
+                  Icons.email_outlined,
                   size: 20,
                   color: AppColors.textSecondary,
                 ),
@@ -139,9 +201,34 @@ class _LoginScreenState extends State<LoginScreen> {
               // Login Button
               AppButton(
                 label: 'Sign In',
-                onPressed: _handleLogin,
+                onPressed: _isLoading ? null : _handleLogin,
                 isLoading: _isLoading,
                 width: double.infinity,
+              ),
+              const SizedBox(height: AppDimensions.md),
+
+              // Google Sign-In Button
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 48),
+                  side: const BorderSide(color: AppColors.surfaceBorder),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: AppDimensions.roundedMd,
+                  ),
+                ),
+                icon: const Icon(
+                  Icons.g_mobiledata_rounded,
+                  size: 28,
+                  color: Colors.blue,
+                ),
+                label: const Text(
+                  'Continue with Google',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                onPressed: _isLoading ? null : _handleGoogleSignIn,
               ),
               const SizedBox(height: AppDimensions.xxl),
 

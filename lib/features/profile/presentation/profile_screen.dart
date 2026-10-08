@@ -1,19 +1,53 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/app_routes.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/supabase/supabase_client_provider.dart';
+import '../../auth/data/auth_provider.dart';
+import '../../wallet/data/wallet_repository.dart';
+import '../data/profile_repository.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profileAsync = ref.watch(userProfileProvider);
+    final user = ref.watch(currentUserProvider);
+    final walletBalanceAsync = ref.watch(walletBalanceProvider);
+
+    final profile = profileAsync.value;
+    final displayName = (profile != null && profile.fullName.isNotEmpty)
+        ? profile.fullName
+        : (user?.email?.split('@').first ?? 'FreshMarket Customer');
+    final displayEmail = profile?.email ?? user?.email ?? 'No email';
+    final displayPhone = (profile?.phone?.isNotEmpty == true)
+        ? profile!.phone!
+        : (user?.userMetadata?['phone'] as String? ?? 'No phone added');
+
+    final initials = displayName
+        .trim()
+        .split(' ')
+        .map((e) => e.isNotEmpty ? e[0].toUpperCase() : '')
+        .take(2)
+        .join();
+
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('My Account')),
+      appBar: AppBar(
+        title: const Text('My Account'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_outlined),
+            tooltip: 'Edit Profile Name',
+            onPressed: () => _showEditProfileDialog(context, ref, displayName),
+          ),
+        ],
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppDimensions.lg),
         physics: const BouncingScrollPhysics(),
@@ -37,10 +71,10 @@ class ProfileScreen extends StatelessWidget {
                       color: AppColors.primaryContainer,
                       shape: BoxShape.circle,
                     ),
-                    child: const Center(
+                    child: Center(
                       child: Text(
-                        'RS',
-                        style: TextStyle(
+                        initials.isNotEmpty ? initials : 'FM',
+                        style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w800,
                           color: AppColors.primaryDark,
@@ -49,21 +83,21 @@ class ProfileScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: AppDimensions.md),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Rahul Sharma',
-                          style: TextStyle(
+                          displayName,
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        SizedBox(height: 2),
+                        const SizedBox(height: 2),
                         Text(
-                          '+91 98765 43210 • rahul@example.com',
-                          style: TextStyle(
+                          '$displayPhone • $displayEmail',
+                          style: const TextStyle(
                             fontSize: 12,
                             color: AppColors.textSecondary,
                           ),
@@ -104,11 +138,11 @@ class ProfileScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: AppDimensions.md),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          const Text(
                             'FreshMarket Wallet',
                             style: TextStyle(
                               color: Colors.white70,
@@ -116,12 +150,30 @@ class ProfileScreen extends StatelessWidget {
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                          Text(
-                            '${AppStrings.currencySymbol}210.00 Balance',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
+                          walletBalanceAsync.when(
+                            loading: () => const Text(
+                              '₹... Balance',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            error: (_, _) => const Text(
+                              '₹0.00 Balance',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            data: (bal) => Text(
+                              '${AppStrings.currencySymbol}${bal.toStringAsFixed(2)} Balance',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
                           ),
                         ],
@@ -139,17 +191,18 @@ class ProfileScreen extends StatelessWidget {
                       child: const Row(
                         children: [
                           Text(
-                            'Ledger',
+                            'View',
                             style: TextStyle(
-                              color: AppColors.primary,
+                              color: Color(0xFF0F766E),
+                              fontWeight: FontWeight.w700,
                               fontSize: 11,
-                              fontWeight: FontWeight.bold,
                             ),
                           ),
+                          SizedBox(width: 4),
                           Icon(
-                            Icons.chevron_right,
-                            size: 14,
-                            color: AppColors.primary,
+                            Icons.arrow_forward_rounded,
+                            size: 12,
+                            color: Color(0xFF0F766E),
                           ),
                         ],
                       ),
@@ -160,7 +213,7 @@ class ProfileScreen extends StatelessWidget {
             ),
             const SizedBox(height: AppDimensions.lg),
 
-            // Navigation Options
+            // Account & Preferences Group
             Container(
               decoration: BoxDecoration(
                 color: AppColors.surface,
@@ -173,39 +226,39 @@ class ProfileScreen extends StatelessWidget {
                     context,
                     icon: Icons.receipt_long_outlined,
                     title: 'My Orders',
-                    subtitle: 'Track order progress and review past cuts',
+                    subtitle: 'Track live orders & butchery preparation',
                     onTap: () => context.push(AppRoutes.orders),
                   ),
                   const Divider(height: 1),
                   _buildMenuTile(
                     context,
-                    icon: Icons.location_on_outlined,
-                    title: 'Saved Delivery Addresses',
-                    subtitle: 'Manage home, office, and delivery pins',
-                    onTap: () => context.push(AppRoutes.addresses),
-                  ),
-                  const Divider(height: 1),
-                  _buildMenuTile(
-                    context,
                     icon: Icons.favorite_border_rounded,
-                    title: 'My Wishlist',
-                    subtitle: 'Saved favorites for fast re-ordering',
+                    title: 'Favorite Cuts',
+                    subtitle: 'Quick re-order your preferred meats',
                     onTap: () => context.push(AppRoutes.wishlist),
                   ),
                   const Divider(height: 1),
                   _buildMenuTile(
                     context,
+                    icon: Icons.location_on_outlined,
+                    title: 'Delivery Addresses',
+                    subtitle: 'Manage home & workplace delivery points',
+                    onTap: () => context.push(AppRoutes.addresses),
+                  ),
+                  const Divider(height: 1),
+                  _buildMenuTile(
+                    context,
                     icon: Icons.notifications_none_rounded,
-                    title: 'Notification Centre',
-                    subtitle: 'Order milestones, receipts & offers',
+                    title: 'Notifications',
+                    subtitle: 'Offers, dispatch alerts, and reminders',
                     onTap: () => context.push(AppRoutes.notifications),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: AppDimensions.md),
+            const SizedBox(height: AppDimensions.lg),
 
-            // Support & Info Options
+            // Support & Information Group
             Container(
               decoration: BoxDecoration(
                 color: AppColors.surface,
@@ -216,9 +269,9 @@ class ProfileScreen extends StatelessWidget {
                 children: [
                   _buildMenuTile(
                     context,
-                    icon: Icons.chat_bubble_outline_rounded,
-                    title: 'WhatsApp Butchery Support',
-                    subtitle: 'Click-to-chat with fresh cut specialists',
+                    icon: Icons.support_agent_rounded,
+                    title: 'Contact Us',
+                    subtitle: 'Direct WhatsApp and Butchery Care Helpline',
                     onTap: () => context.push(AppRoutes.contactUs),
                   ),
                   const Divider(height: 1),
@@ -226,26 +279,19 @@ class ProfileScreen extends StatelessWidget {
                     context,
                     icon: Icons.info_outline_rounded,
                     title: 'About FreshMarket',
-                    subtitle: 'Our farm sourcing and hygiene standards',
+                    subtitle: 'Our cold-chain, butchery, & safety promise',
                     onTap: () => context.push(AppRoutes.aboutUs),
-                  ),
-                  const Divider(height: 1),
-                  _buildMenuTile(
-                    context,
-                    icon: Icons.contact_support_outlined,
-                    title: 'Contact Us',
-                    subtitle: 'Customer care, feedback and grievances',
-                    onTap: () => context.push(AppRoutes.contactUs),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: AppDimensions.lg),
 
-            // Sign out button
+            // Logout Button
             ListTile(
-              shape: const RoundedRectangleBorder(
+              shape: RoundedRectangleBorder(
                 borderRadius: AppDimensions.roundedMd,
+                side: const BorderSide(color: AppColors.surfaceBorder),
               ),
               tileColor: AppColors.surface,
               leading: const Icon(Icons.logout_rounded, color: AppColors.error),
@@ -271,9 +317,14 @@ class ProfileScreen extends StatelessWidget {
                         child: const Text('Cancel'),
                       ),
                       TextButton(
-                        onPressed: () {
+                        onPressed: () async {
                           Navigator.pop(ctx);
-                          context.go(AppRoutes.login);
+                          await ref
+                              .read(authNotifierProvider.notifier)
+                              .signOut();
+                          if (context.mounted) {
+                            context.go(AppRoutes.login);
+                          }
                         },
                         child: const Text(
                           'Sign Out',
@@ -295,6 +346,62 @@ class ProfileScreen extends StatelessWidget {
             const SizedBox(height: AppDimensions.xxxl),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showEditProfileDialog(
+    BuildContext context,
+    WidgetRef ref,
+    String currentName,
+  ) {
+    final nameCtrl = TextEditingController(text: currentName);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Full Name'),
+        content: TextField(
+          controller: nameCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Full Name',
+            hintText: 'Enter your full name',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final newName = nameCtrl.text.trim();
+              if (newName.isNotEmpty) {
+                Navigator.pop(ctx);
+                try {
+                  await ref
+                      .read(profileRepositoryProvider)
+                      .updateProfile(fullName: newName);
+                  ref.invalidate(userProfileProvider);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Profile updated successfully'),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error updating profile: $e')),
+                    );
+                  }
+                }
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
       ),
     );
   }

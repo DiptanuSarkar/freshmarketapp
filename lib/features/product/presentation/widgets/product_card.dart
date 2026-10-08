@@ -135,10 +135,13 @@ class _ProductCardState extends ConsumerState<ProductCard> {
                   child: Material(
                     color: Colors.transparent,
                     child: InkWell(
-                      onTap: () {
-                        ref
+                      onTap: () async {
+                        final ok = await ref
                             .read(wishlistProvider.notifier)
                             .toggle(widget.product.id);
+                        if (!ok && context.mounted) {
+                          _showLoginRequired(context);
+                        }
                       },
                       borderRadius: AppDimensions.roundedPill,
                       child: Container(
@@ -346,11 +349,14 @@ class _ProductCardState extends ConsumerState<ProductCard> {
                           SizedBox(
                             height: 28,
                             child: OutlinedButton(
-                              onPressed: () {
-                                cartNotifier.addItem(
+                              onPressed: () async {
+                                final ok = await cartNotifier.addItem(
                                   widget.product,
                                   _selectedVariant,
                                 );
+                                if (!ok && context.mounted) {
+                                  _showLoginRequired(context);
+                                }
                               },
                               style: OutlinedButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(
@@ -383,6 +389,31 @@ class _ProductCardState extends ConsumerState<ProductCard> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showLoginRequired(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sign In Required'),
+        content: const Text(
+          'Please sign in or create an account to save favorite cuts and add items to your cart.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              context.push(AppRoutes.login);
+            },
+            child: const Text('Sign In'),
+          ),
+        ],
       ),
     );
   }

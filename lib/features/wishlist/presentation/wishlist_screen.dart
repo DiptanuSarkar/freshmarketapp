@@ -8,6 +8,7 @@ import '../../../core/constants/app_dimensions.dart';
 import '../../../core/widgets/feedback/app_empty_state.dart';
 import '../../../shared/providers/products_provider.dart';
 import '../../../shared/providers/wishlist_provider.dart';
+import '../../catalog/data/catalog_repository.dart';
 import '../../product/presentation/widgets/product_card.dart';
 
 class WishlistScreen extends ConsumerWidget {
@@ -40,27 +41,34 @@ class WishlistScreen extends ConsumerWidget {
               actionLabel: 'Explore Cuts',
               onAction: () => context.go(AppRoutes.home),
             )
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                final crossAxisCount = constraints.maxWidth > 600 ? 3 : 2;
-                return GridView.builder(
-                  padding: const EdgeInsets.all(AppDimensions.lg),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: crossAxisCount,
-                    childAspectRatio: 0.62,
-                    crossAxisSpacing: AppDimensions.md,
-                    mainAxisSpacing: AppDimensions.md,
-                  ),
-                  itemCount: favProducts.length,
-                  itemBuilder: (context, index) {
-                    final product = favProducts[index];
-                    return ProductCard(
-                      product: product,
-                      width: double.infinity,
-                    );
-                  },
-                );
+          : RefreshIndicator(
+              onRefresh: () async {
+                await ref.read(wishlistProvider.notifier).loadWishlist();
+                ref.invalidate(catalogProductsProvider);
+                await ref.read(catalogProductsProvider.future);
               },
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final crossAxisCount = constraints.maxWidth > 600 ? 3 : 2;
+                  return GridView.builder(
+                    padding: const EdgeInsets.all(AppDimensions.lg),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: crossAxisCount,
+                      childAspectRatio: 0.62,
+                      crossAxisSpacing: AppDimensions.md,
+                      mainAxisSpacing: AppDimensions.md,
+                    ),
+                    itemCount: favProducts.length,
+                    itemBuilder: (context, index) {
+                      final product = favProducts[index];
+                      return ProductCard(
+                        product: product,
+                        width: double.infinity,
+                      );
+                    },
+                  );
+                },
+              ),
             ),
     );
   }

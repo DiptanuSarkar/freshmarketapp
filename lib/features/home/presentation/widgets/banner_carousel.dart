@@ -2,22 +2,23 @@ import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/app_routes.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_dimensions.dart';
-import '../../../../shared/data/mock_data.dart';
 import '../../../../shared/models/banner_item.dart';
+import '../../data/home_repository.dart';
 
-class BannerCarousel extends StatefulWidget {
+class BannerCarousel extends ConsumerStatefulWidget {
   const BannerCarousel({super.key});
 
   @override
-  State<BannerCarousel> createState() => _BannerCarouselState();
+  ConsumerState<BannerCarousel> createState() => _BannerCarouselState();
 }
 
-class _BannerCarouselState extends State<BannerCarousel> {
+class _BannerCarouselState extends ConsumerState<BannerCarousel> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
   Timer? _timer;
@@ -31,7 +32,9 @@ class _BannerCarouselState extends State<BannerCarousel> {
   void _startAutoPlay() {
     _timer = Timer.periodic(const Duration(seconds: 4), (timer) {
       if (!mounted) return;
-      final nextPage = (_currentPage + 1) % MockData.banners.length;
+      final banners = ref.read(homeBannersProvider).value ?? [];
+      if (banners.isEmpty) return;
+      final int nextPage = ((_currentPage + 1) % banners.length).toInt();
       _pageController.animateToPage(
         nextPage,
         duration: const Duration(milliseconds: 400),
@@ -49,41 +52,54 @@ class _BannerCarouselState extends State<BannerCarousel> {
 
   @override
   Widget build(BuildContext context) {
-    final banners = MockData.banners;
+    final bannersAsync = ref.watch(homeBannersProvider);
 
-    return Column(
-      children: [
-        SizedBox(
-          height: 154,
-          child: PageView.builder(
-            controller: _pageController,
-            onPageChanged: (index) => setState(() => _currentPage = index),
-            itemCount: banners.length,
-            itemBuilder: (context, index) {
-              final banner = banners[index];
-              return _buildBannerCard(banner);
-            },
-          ),
-        ),
-        const SizedBox(height: AppDimensions.sm),
-        // Indicator Dots
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(banners.length, (index) {
-            final isSelected = index == _currentPage;
-            return AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              margin: const EdgeInsets.symmetric(horizontal: 3),
-              width: isSelected ? 18 : 6,
-              height: 6,
-              decoration: BoxDecoration(
-                color: isSelected ? AppColors.primary : AppColors.surfaceBorder,
-                borderRadius: AppDimensions.roundedPill,
+    return bannersAsync.when(
+      loading: () => const SizedBox(
+        height: 154,
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      ),
+      error: (_, _) => const SizedBox.shrink(),
+      data: (banners) {
+        if (banners.isEmpty) return const SizedBox.shrink();
+
+        return Column(
+          children: [
+            SizedBox(
+              height: 154,
+              child: PageView.builder(
+                controller: _pageController,
+                onPageChanged: (index) => setState(() => _currentPage = index),
+                itemCount: banners.length,
+                itemBuilder: (context, index) {
+                  final banner = banners[index];
+                  return _buildBannerCard(banner);
+                },
               ),
-            );
-          }),
-        ),
-      ],
+            ),
+            const SizedBox(height: AppDimensions.sm),
+            // Indicator Dots
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(banners.length, (index) {
+                final isSelected = index == _currentPage;
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  width: isSelected ? 18 : 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? AppColors.primary
+                        : AppColors.surfaceBorder,
+                    borderRadius: AppDimensions.roundedPill,
+                  ),
+                );
+              }),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -100,69 +116,72 @@ class _BannerCarouselState extends State<BannerCarousel> {
             context.push(AppRoutes.categories);
           }
         },
-        borderRadius: AppDimensions.roundedLg,
+        borderRadius: AppDimensions.roundedMd,
         child: Container(
           decoration: BoxDecoration(
-            borderRadius: AppDimensions.roundedLg,
+            color: AppColors.primaryDark,
+            borderRadius: AppDimensions.roundedMd,
             boxShadow: AppDimensions.cardShadow,
           ),
           clipBehavior: Clip.antiAlias,
           child: Stack(
-            fit: StackFit.expand,
             children: [
-              // Background Image
-              CachedNetworkImage(
-                imageUrl: banner.imageUrl,
-                fit: BoxFit.cover,
-                placeholder: (context, url) =>
-                    Container(color: AppColors.surfaceSubtle),
-                errorWidget: (context, url, error) =>
-                    Container(color: AppColors.surfaceSubtle),
+              // Background Image with Gradient Overlay
+              Positioned.fill(
+                child: banner.imageUrl.isNotEmpty
+                    ? CachedNetworkImage(
+                        imageUrl: banner.imageUrl,
+                        fit: BoxFit.cover,
+                        errorWidget: (context, url, error) =>
+                            Container(color: AppColors.primaryDark),
+                      )
+                    : Container(color: AppColors.primaryDark),
               ),
-
-              // Gradient Overlay for text readability
-              Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.black.withValues(alpha: 0.82),
-                      Colors.black.withValues(alpha: 0.4),
-                      Colors.transparent,
-                    ],
-                    stops: const [0.0, 0.65, 1.0],
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.black.withValues(alpha: 0.82),
+                        Colors.black.withValues(alpha: 0.40),
+                        Colors.transparent,
+                      ],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    ),
                   ),
                 ),
               ),
-
-              // Banner Content
+              // Content Left Aligned
               Padding(
                 padding: const EdgeInsets.all(AppDimensions.lg),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 2,
-                      ),
-                      decoration: const BoxDecoration(
-                        color: AppColors.accent,
-                        borderRadius: AppDimensions.roundedXs,
-                      ),
-                      child: Text(
-                        banner.badgeText,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.3,
+                    // Badge Text
+                    if (banner.badgeText.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.accent,
+                          borderRadius: AppDimensions.roundedPill,
+                        ),
+                        child: Text(
+                          banner.badgeText,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                          ),
                         ),
                       ),
-                    ),
                     const SizedBox(height: 6),
+                    // Title
                     Text(
                       banner.title,
                       style: const TextStyle(
@@ -172,18 +191,23 @@ class _BannerCarouselState extends State<BannerCarousel> {
                         height: 1.2,
                       ),
                       maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      banner.subtitle,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
+                    const SizedBox(height: 2),
+                    // Subtitle
+                    if (banner.subtitle.isNotEmpty)
+                      Text(
+                        banner.subtitle,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.85),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w400,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                    ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
+                    // Action CTA Pill
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,
@@ -204,7 +228,7 @@ class _BannerCarouselState extends State<BannerCarousel> {
                               fontWeight: FontWeight.w700,
                             ),
                           ),
-                          const SizedBox(width: 3),
+                          const SizedBox(width: 4),
                           const Icon(
                             Icons.arrow_forward_rounded,
                             size: 12,

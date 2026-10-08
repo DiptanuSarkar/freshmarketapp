@@ -1,34 +1,99 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/widgets/buttons/app_button.dart';
 import '../../../core/widgets/inputs/app_text_field.dart';
+import '../../profile/data/profile_repository.dart';
+import '../data/support_repository.dart';
 
-class ContactUsScreen extends StatefulWidget {
+class ContactUsScreen extends ConsumerStatefulWidget {
   const ContactUsScreen({super.key});
 
   @override
-  State<ContactUsScreen> createState() => _ContactUsScreenState();
+  ConsumerState<ContactUsScreen> createState() => _ContactUsScreenState();
 }
 
-class _ContactUsScreenState extends State<ContactUsScreen> {
+class _ContactUsScreenState extends ConsumerState<ContactUsScreen> {
   final _nameController = TextEditingController();
   final _orderIdController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _messageController = TextEditingController();
   bool _isSubmitted = false;
+  bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      final profile = ref.read(userProfileProvider).value;
+      if (profile != null && mounted) {
+        if (_nameController.text.isEmpty && profile.fullName.isNotEmpty) {
+          _nameController.text = profile.fullName;
+        }
+        if (_phoneController.text.isEmpty && profile.phone != null) {
+          _phoneController.text = profile.phone!;
+        }
+      }
+    });
+  }
 
   @override
   void dispose() {
     _nameController.dispose();
     _orderIdController.dispose();
+    _phoneController.dispose();
     _messageController.dispose();
     super.dispose();
   }
 
-  void _handleSubmit() {
-    if (_nameController.text.isNotEmpty && _messageController.text.isNotEmpty) {
-      setState(() => _isSubmitted = true);
+  Future<void> _handleSubmit() async {
+    final name = _nameController.text.trim();
+    final message = _messageController.text.trim();
+    final orderId = _orderIdController.text.trim();
+    final phone = _phoneController.text.trim();
+
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please enter your name.')));
+      return;
+    }
+    if (message.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your support message.')),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+    try {
+      final repo = ref.read(supportRepositoryProvider);
+      await repo.submitContactMessage(
+        name: name,
+        phone: phone.isNotEmpty ? phone : null,
+        subject: orderId.isNotEmpty
+            ? 'Order Inquiry: $orderId'
+            : 'General Butchery Inquiry',
+        message: message,
+      );
+      if (mounted) {
+        setState(() {
+          _isSubmitted = true;
+          _isSubmitting = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to submit message: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
     }
   }
 
@@ -56,7 +121,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: const BoxDecoration(
-                      color: Color(0xFF25D366), // WhatsApp Green
+                      color: Color(0xFF25D366),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -100,20 +165,19 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
                             );
                           },
                           child: const Row(
-                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                'Open WhatsApp Chat',
+                                'Chat Now',
                                 style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
                                   color: Color(0xFF1B5E20),
                                 ),
                               ),
                               SizedBox(width: 4),
                               Icon(
                                 Icons.arrow_forward_rounded,
-                                size: 14,
+                                size: 12,
                                 color: Color(0xFF1B5E20),
                               ),
                             ],
@@ -129,7 +193,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
 
             // Quick Contact Numbers
             Container(
-              padding: const EdgeInsets.all(AppDimensions.md),
+              padding: const EdgeInsets.all(AppDimensions.lg),
               decoration: BoxDecoration(
                 color: AppColors.surface,
                 borderRadius: AppDimensions.roundedMd,
@@ -138,26 +202,24 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
               child: const Column(
                 children: [
                   _ContactRow(
-                    icon: Icons.phone_outlined,
-                    title: 'Customer Hotline',
-                    value: '+91 80 4712 9900 (Toll Free)',
-                    subtitle: '6:00 AM - 10:00 PM (All 7 Days)',
+                    icon: Icons.phone_in_talk_rounded,
+                    title: 'Helpline Number',
+                    subtitle: '1800-419-MEAT (Toll Free, 6 AM - 10 PM)',
                   ),
-                  Divider(height: 16),
+                  Divider(height: AppDimensions.lg),
                   _ContactRow(
                     icon: Icons.email_outlined,
-                    title: 'Care Email',
-                    value: 'care@freshmarket.app',
-                    subtitle: 'Guaranteed response within 4 hours',
+                    title: 'Email Inquiries',
+                    subtitle: 'care@freshmarket.in (24hr response)',
                   ),
                 ],
               ),
             ),
             const SizedBox(height: AppDimensions.xl),
 
-            // Feedback / Inquiry Form
+            // Grievance / In-App Message Form
             const Text(
-              'Send us a Message',
+              'Submit a Support Grievance',
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w800,
@@ -166,7 +228,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
             ),
             const SizedBox(height: AppDimensions.xs),
             const Text(
-              'Have custom cut requests, packaging feedback, or questions? Write to us below.',
+              'Have an issue with meat freshness, packaging, or butchery precision? Fill in the details below.',
               style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
             ),
             const SizedBox(height: AppDimensions.md),
@@ -197,7 +259,7 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
                     ),
                     SizedBox(height: 4),
                     Text(
-                      'Your message has been logged with our customer success team.',
+                      'Your message has been logged in our support registry. Our butchery team will get back to you shortly.',
                       style: TextStyle(fontSize: 12, color: AppColors.success),
                       textAlign: TextAlign.center,
                     ),
@@ -221,6 +283,12 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
                     ),
                     const SizedBox(height: AppDimensions.sm),
                     AppTextField(
+                      controller: _phoneController,
+                      label: 'Phone Number (Optional)',
+                      hint: '+91 98765 43210',
+                    ),
+                    const SizedBox(height: AppDimensions.sm),
+                    AppTextField(
                       controller: _orderIdController,
                       label: 'Order ID (Optional)',
                       hint: 'e.g. FM-2026-9041',
@@ -234,9 +302,10 @@ class _ContactUsScreenState extends State<ContactUsScreen> {
                     ),
                     const SizedBox(height: AppDimensions.md),
                     AppButton(
-                      label: 'Submit Message',
+                      label: _isSubmitting ? 'Submitting...' : 'Submit Message',
                       width: double.infinity,
-                      onPressed: _handleSubmit,
+                      isLoading: _isSubmitting,
+                      onPressed: _isSubmitting ? null : _handleSubmit,
                     ),
                   ],
                 ),
@@ -253,13 +322,11 @@ class _ContactRow extends StatelessWidget {
   const _ContactRow({
     required this.icon,
     required this.title,
-    required this.value,
     required this.subtitle,
   });
 
   final IconData icon;
   final String title;
-  final String value;
   final String subtitle;
 
   @override
@@ -268,9 +335,9 @@ class _ContactRow extends StatelessWidget {
       children: [
         Container(
           padding: const EdgeInsets.all(8),
-          decoration: const BoxDecoration(
-            color: AppColors.surfaceSubtle,
-            shape: BoxShape.circle,
+          decoration: BoxDecoration(
+            color: AppColors.primaryContainer,
+            borderRadius: AppDimensions.roundedSm,
           ),
           child: Icon(icon, color: AppColors.primary, size: 20),
         ),
@@ -282,23 +349,17 @@ class _ContactRow extends StatelessWidget {
               Text(
                 title,
                 style: const TextStyle(
-                  fontSize: 11,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              Text(
-                value,
-                style: const TextStyle(
                   fontSize: 13,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
                 ),
               ),
+              const SizedBox(height: 2),
               Text(
                 subtitle,
                 style: const TextStyle(
-                  fontSize: 10,
-                  color: AppColors.textTertiary,
+                  fontSize: 11,
+                  color: AppColors.textSecondary,
                 ),
               ),
             ],

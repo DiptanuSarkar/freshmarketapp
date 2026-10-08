@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
@@ -8,41 +9,57 @@ import '../../../core/constants/app_dimensions.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/widgets/badges/status_badge.dart';
 import '../../../core/widgets/feedback/app_empty_state.dart';
-import '../../../shared/data/mock_data.dart';
+import '../../../core/widgets/feedback/app_error_widget.dart';
+import '../../../core/widgets/feedback/app_loading_indicator.dart';
 import '../../../shared/models/order.dart';
+import '../data/orders_repository.dart';
 
-class OrdersScreen extends StatelessWidget {
+class OrdersScreen extends ConsumerWidget {
   const OrdersScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final orders = MockData.sampleOrders;
-
-    if (orders.isEmpty) {
-      return Scaffold(
-        backgroundColor: AppColors.background,
-        appBar: AppBar(title: const Text('My Orders')),
-        body: AppEmptyState(
-          title: 'No Orders Yet',
-          message: 'When you place an order for fresh meats, you can track butchery preparation and delivery here.',
-          icon: Icons.receipt_long_outlined,
-          actionLabel: 'Order Fresh Meat',
-          onAction: () => context.go(AppRoutes.home),
-        ),
-      );
-    }
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ordersAsync = ref.watch(customerOrdersProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('My Orders')),
-      body: ListView.separated(
-        padding: const EdgeInsets.all(AppDimensions.lg),
-        itemCount: orders.length,
-        separatorBuilder: (context, index) =>
-            const SizedBox(height: AppDimensions.md),
-        itemBuilder: (context, index) {
-          final order = orders[index];
-          return _buildOrderCard(context, order);
+      body: ordersAsync.when(
+        loading: () => const Center(
+          child: AppLoadingIndicator(message: 'Loading your orders...'),
+        ),
+        error: (err, stack) => AppErrorWidget(
+          title: "Couldn't load orders",
+          message: 'Please check your connection and try again.',
+          onRetry: () => ref.refresh(customerOrdersProvider),
+        ),
+        data: (orders) {
+          if (orders.isEmpty) {
+            return AppEmptyState(
+              title: 'No Orders Yet',
+              message: 'When you place an order for fresh meats, you can track butchery preparation and delivery here.',
+              icon: Icons.receipt_long_outlined,
+              actionLabel: 'Order Fresh Meat',
+              onAction: () => context.go(AppRoutes.home),
+            );
+          }
+
+          return RefreshIndicator(
+            onRefresh: () async {
+              ref.invalidate(customerOrdersProvider);
+              await ref.read(customerOrdersProvider.future);
+            },
+            child: ListView.separated(
+              padding: const EdgeInsets.all(AppDimensions.lg),
+              itemCount: orders.length,
+              separatorBuilder: (context, index) =>
+                  const SizedBox(height: AppDimensions.md),
+              itemBuilder: (context, index) {
+                final order = orders[index];
+                return _buildOrderCard(context, order);
+              },
+            ),
+          );
         },
       ),
     );
@@ -54,6 +71,8 @@ class OrdersScreen extends StatelessWidget {
 
     BadgeVariant badgeVariant;
     switch (order.status) {
+      case OrderStatus.paymentPending:
+        badgeVariant = BadgeVariant.warning;
       case OrderStatus.delivered:
         badgeVariant = BadgeVariant.success;
       case OrderStatus.outForDelivery:
@@ -72,13 +91,13 @@ class OrdersScreen extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: AppDimensions.roundedMd,
-          border: Border.all(color: AppColors.surfaceBorder, width: 1),
+          border: Border.all(color: AppColors.surfaceBorder),
           boxShadow: AppDimensions.cardShadow,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Order number & Status
+            // Top Row: Order ID & Status Badge
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -93,11 +112,12 @@ class OrdersScreen extends StatelessWidget {
                         color: AppColors.textPrimary,
                       ),
                     ),
+                    const SizedBox(height: 2),
                     Text(
                       formattedDate,
                       style: const TextStyle(
                         fontSize: 11,
-                        color: AppColors.textSecondary,
+                        color: AppColors.textTertiary,
                       ),
                     ),
                   ],
@@ -108,54 +128,35 @@ class OrdersScreen extends StatelessWidget {
                 ),
               ],
             ),
-            const Divider(height: 20),
+            const SizedBox(height: AppDimensions.md),
+            const Divider(height: 1),
+            const SizedBox(height: AppDimensions.sm),
 
-            // Items summary
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: order.items.map((item) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 4.0),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 5,
-                        height: 5,
-                        decoration: const BoxDecoration(
-                          color: AppColors.primary,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '${item.quantity} x ${item.productName} (${item.variantTitle})',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
+            // Items Summary
+            Text(
+              order.items
+                  .map((item) => '${item.quantity}x ${item.productName}')
+                  .join(', '),
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.textSecondary,
+                height: 1.3,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppDimensions.md),
 
-            // Total amount & Action button
+            // Bottom Row: Total & Action CTA
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Row(
                   children: [
                     const Text(
-                      'Total Amount',
+                      'Total: ',
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 12,
                         color: AppColors.textSecondary,
                       ),
                     ),
@@ -169,31 +170,23 @@ class OrdersScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-                OutlinedButton(
-                  onPressed: () => context.push(
-                    '${AppRoutes.orderDetailPrefix}/${order.id}',
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 6,
+                const Row(
+                  children: [
+                    Text(
+                      'Track Order',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary,
+                      ),
                     ),
-                    side: const BorderSide(
-                      color: AppColors.primary,
-                      width: 1.2,
-                    ),
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: AppDimensions.roundedSm,
-                    ),
-                  ),
-                  child: const Text(
-                    'Track Order',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
+                    SizedBox(width: 4),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 16,
                       color: AppColors.primary,
                     ),
-                  ),
+                  ],
                 ),
               ],
             ),

@@ -573,16 +573,27 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
 AS $$
+DECLARE
+  v_is_privileged boolean;
 BEGIN
+  v_is_privileged := (
+    current_user IN ('postgres', 'supabase_admin')
+    OR (current_setting('request.jwt.claim.role', true) = 'service_role')
+    OR (SELECT private.has_role('admin'::public.app_role))
+  );
+
   IF NEW.id <> OLD.id THEN
     RAISE EXCEPTION 'Cannot modify profile id';
   END IF;
-  IF NEW.is_active <> OLD.is_active AND NOT (SELECT private.has_role('admin'::public.app_role)) THEN
+
+  IF NEW.is_active <> OLD.is_active AND NOT v_is_privileged THEN
     RAISE EXCEPTION 'Cannot modify profile is_active';
   END IF;
-  IF (NEW.email IS DISTINCT FROM OLD.email OR NEW.phone IS DISTINCT FROM OLD.phone) AND NOT (SELECT private.has_role('admin'::public.app_role)) THEN
+
+  IF (NEW.email IS DISTINCT FROM OLD.email OR NEW.phone IS DISTINCT FROM OLD.phone) AND NOT v_is_privileged THEN
     RAISE EXCEPTION 'Email and phone can only be modified via auth synchronization';
   END IF;
+
   RETURN NEW;
 END;
 $$;
@@ -599,12 +610,28 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
 AS $$
+DECLARE
+  v_is_privileged boolean;
 BEGIN
-  IF NOT (SELECT private.has_role('admin'::public.app_role)) THEN
-    NEW.user_id := auth.uid();
-    NEW.is_verified_purchase := false;
-    NEW.is_approved := false;
-    NEW.order_id := NULL;
+  v_is_privileged := (
+    current_user IN ('postgres', 'supabase_admin')
+    OR (current_setting('request.jwt.claim.role', true) = 'service_role')
+    OR (SELECT private.has_role('admin'::public.app_role))
+  );
+
+  IF NOT v_is_privileged THEN
+    IF TG_OP = 'INSERT' THEN
+      NEW.user_id := auth.uid();
+      NEW.is_verified_purchase := false;
+      NEW.is_approved := false;
+      NEW.order_id := NULL;
+    ELSIF TG_OP = 'UPDATE' THEN
+      NEW.user_id := OLD.user_id;
+      NEW.product_id := OLD.product_id;
+      NEW.order_id := OLD.order_id;
+      NEW.is_verified_purchase := OLD.is_verified_purchase;
+      NEW.is_approved := false;
+    END IF;
   END IF;
   RETURN NEW;
 END;
@@ -612,7 +639,7 @@ $$;
 
 DROP TRIGGER IF EXISTS trg_sanitize_product_review ON public.product_reviews;
 CREATE TRIGGER trg_sanitize_product_review
-  BEFORE INSERT ON public.product_reviews
+  BEFORE INSERT OR UPDATE ON public.product_reviews
   FOR EACH ROW EXECUTE FUNCTION public.sanitize_product_review();
 
 -- 11. FCM Token Registration Transfer Trigger (Section H)
@@ -627,7 +654,7 @@ BEGIN
   SET is_active = false,
       updated_at = now()
   WHERE token = NEW.token
-    AND user_id <> NEW.user_id
+    AND id <> COALESCE(NEW.id, '00000000-0000-0000-0000-000000000000'::uuid)
     AND is_active = true;
 
   RETURN NEW;

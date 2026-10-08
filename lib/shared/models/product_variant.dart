@@ -11,6 +11,9 @@ class ProductVariant {
     this.stockQuantity = 50,
     this.isAvailable = true,
     this.netWeightDisplay,
+    this.grossWeightDisplay,
+    this.piecesCount,
+    this.serves,
   });
 
   final String id;
@@ -22,6 +25,11 @@ class ProductVariant {
   final int stockQuantity;
   final bool isAvailable;
   final String? netWeightDisplay; // e.g. "Net wt: 450g | Gross: 500g"
+  final String? grossWeightDisplay;
+  final String? piecesCount;
+  final String? serves;
+
+  int get stock => stockQuantity;
 
   bool get hasDiscount => originalPrice != null && originalPrice! > price;
 

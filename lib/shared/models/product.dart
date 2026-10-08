@@ -9,6 +9,8 @@ class Product {
     required this.description,
     required this.images,
     required this.variants,
+    this.storageInstructions,
+    this.cookingSuggestions,
     this.isFeatured = false,
     this.isDailyDeal = false,
     this.isPopular = false,
@@ -25,6 +27,8 @@ class Product {
   final String description;
   final List<String> images;
   final List<ProductVariant> variants;
+  final String? storageInstructions;
+  final String? cookingSuggestions;
   final bool isFeatured;
   final bool isDailyDeal;
   final bool isPopular;

@@ -1,10 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../data/mock_data.dart';
+import '../../features/catalog/data/catalog_repository.dart';
 import '../models/product.dart';
 
 final allProductsProvider = Provider<List<Product>>((ref) {
-  return MockData.products;
+  final asyncVal = ref.watch(catalogProductsProvider);
+  return asyncVal.value ?? const [];
 });
 
 final dealsProductsProvider = Provider<List<Product>>((ref) {
@@ -28,15 +29,30 @@ final searchQueryProvider = NotifierProvider<SearchQueryNotifier, String>(
   SearchQueryNotifier.new,
 );
 
+class DebouncedSearchQueryNotifier extends Notifier<String> {
+  @override
+  String build() => '';
+
+  void setQuery(String query) => state = query;
+}
+
+final debouncedSearchQueryProvider =
+    NotifierProvider<DebouncedSearchQueryNotifier, String>(
+      DebouncedSearchQueryNotifier.new,
+    );
+
+final searchResultsFutureProvider = FutureProvider<List<Product>>((ref) async {
+  final query = ref.watch(debouncedSearchQueryProvider).trim();
+  if (query.isEmpty) {
+    return ref.watch(allProductsProvider);
+  }
+  final repo = ref.watch(catalogRepositoryProvider);
+  return repo.searchProducts(query);
+});
+
 final searchResultsProvider = Provider<List<Product>>((ref) {
-  final query = ref.watch(searchQueryProvider).trim().toLowerCase();
-  final products = ref.watch(allProductsProvider);
-  if (query.isEmpty) return products;
-  return products.where((p) {
-    return p.name.toLowerCase().contains(query) ||
-        p.categorySlug.toLowerCase().contains(query) ||
-        p.shortDescription.toLowerCase().contains(query);
-  }).toList();
+  final asyncResults = ref.watch(searchResultsFutureProvider);
+  return asyncResults.value ?? const [];
 });
 
 final categoryProductsProvider = Provider.family<List<Product>, String>((

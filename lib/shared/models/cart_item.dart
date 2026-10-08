@@ -3,11 +3,13 @@ import 'product_variant.dart';
 
 class CartItem {
   const CartItem({
+    this.id,
     required this.product,
     required this.selectedVariant,
     this.quantity = 1,
   });
 
+  final String? id;
   final Product product;
   final ProductVariant selectedVariant;
   final int quantity;
@@ -22,11 +24,13 @@ class CartItem {
   double get totalSavings => totalOriginalPrice - totalPrice;
 
   CartItem copyWith({
+    String? id,
     Product? product,
     ProductVariant? selectedVariant,
     int? quantity,
   }) {
     return CartItem(
+      id: id ?? this.id,
       product: product ?? this.product,
       selectedVariant: selectedVariant ?? this.selectedVariant,
       quantity: quantity ?? this.quantity,

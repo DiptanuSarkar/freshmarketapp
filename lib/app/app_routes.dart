@@ -25,6 +25,8 @@ abstract final class AppRoutes {
   // Shopping & Checkout
   static const String checkout = '/checkout';
   static const String paymentSuccess = '/payment-success';
+  static const String orderSuccess = '/order-success/:orderId';
+  static const String orderSuccessPrefix = '/order-success';
 
   // Customer Management & Support
   static const String orderDetail = '/orders/:id';

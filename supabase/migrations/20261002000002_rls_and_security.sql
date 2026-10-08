@@ -8,11 +8,12 @@
 REVOKE ALL ON SCHEMA private FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON ALL TABLES IN SCHEMA private FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA private FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION private.has_role(public.app_role) FROM PUBLIC, anon, authenticated;
 
 GRANT USAGE ON SCHEMA private TO authenticated;
 GRANT EXECUTE ON FUNCTION private.has_role(public.app_role) TO authenticated;
 
--- Admin access to user_roles
+-- Admin access to user_roles table within private schema
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE private.user_roles TO authenticated;
 
 -- -----------------------------------------------------------------------------
@@ -71,12 +72,19 @@ GRANT UPDATE (rating, review_text) ON public.product_reviews TO authenticated;
 GRANT SELECT ON public.delivery_assignments TO authenticated;
 GRANT SELECT, INSERT ON public.delivery_locations TO authenticated;
 
--- Admin Authoritative Table Access via RLS
-GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
+-- Service Role Full Permissions for backend and authoritative operations
+GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO service_role;
+GRANT ALL ON SCHEMA public TO service_role;
+GRANT ALL ON SCHEMA private TO service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA private TO service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA private TO service_role;
 
 -- Sequence Usage: Remove customer sequence access (Section J)
 -- Only service_role has sequence access; authenticated is explicitly denied
 REVOKE ALL ON SEQUENCE public.order_number_seq FROM PUBLIC, anon, authenticated;
+GRANT USAGE ON SEQUENCE public.order_number_seq TO service_role;
 
 -- -----------------------------------------------------------------------------
 -- 3. Harden Function Privileges (Section K)
@@ -291,10 +299,16 @@ FOR ALL TO authenticated
 USING (private.has_role('admin'::public.app_role))
 WITH CHECK (private.has_role('admin'::public.app_role));
 
--- coupon_categories
+-- coupon_categories (Section I: prevent leaking private/targeted coupon configurations)
 CREATE POLICY coupon_categories_select ON public.coupon_categories
 FOR SELECT TO anon, authenticated
-USING (true);
+USING (
+  EXISTS (
+    SELECT 1 FROM public.coupons c
+    WHERE c.id = coupon_categories.coupon_id
+  )
+  OR private.has_role('admin'::public.app_role)
+);
 
 CREATE POLICY coupon_categories_admin_all ON public.coupon_categories
 FOR ALL TO authenticated

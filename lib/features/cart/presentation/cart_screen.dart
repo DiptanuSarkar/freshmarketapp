@@ -119,14 +119,17 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Delivering to ${selectedAddress.tag}',
+                                selectedAddress != null
+                                    ? 'Delivering to ${selectedAddress.tag}'
+                                    : 'Select Delivery Address',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 12,
                                 ),
                               ),
                               Text(
-                                selectedAddress.formattedAddress,
+                                selectedAddress?.formattedAddress ??
+                                    'Add an address to check delivery',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
@@ -139,9 +142,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                         ),
                         InkWell(
                           onTap: () => context.push(AppRoutes.addresses),
-                          child: const Text(
-                            'Change',
-                            style: TextStyle(
+                          child: Text(
+                            selectedAddress != null ? 'Change' : 'Add',
+                            style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
                               color: AppColors.primary,
@@ -251,8 +254,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                       fontWeight: FontWeight.bold,
                                     ),
                                     decoration: InputDecoration(
-                                      hintText:
-                                          'Enter coupon code (try FRESH50)',
+                                      hintText: 'Enter coupon code',
                                       hintStyle: const TextStyle(
                                         fontSize: 11,
                                         color: AppColors.textTertiary,
@@ -276,20 +278,32 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                               SizedBox(
                                 height: 38,
                                 child: ElevatedButton(
-                                  onPressed: () {
+                                  onPressed: () async {
                                     final code = _couponController.text.trim();
                                     if (code.isNotEmpty) {
-                                      cartNotifier.applyCoupon(code);
-                                      if (cartState.appliedCouponCode == null &&
-                                          code.toUpperCase() != 'FRESH50') {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                              const SnackBar(
-                                                content: Text(
-                                                  'Invalid coupon code',
-                                                ),
-                                              ),
-                                            );
+                                      final error = await cartNotifier
+                                          .applyCoupon(code);
+                                      if (!context.mounted) return;
+                                      if (error != null) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(error),
+                                            backgroundColor: AppColors.error,
+                                          ),
+                                        );
+                                      } else {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              'Coupon "$code" applied!',
+                                            ),
+                                            backgroundColor: AppColors.success,
+                                          ),
+                                        );
                                       }
                                     }
                                   },
