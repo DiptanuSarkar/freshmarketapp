@@ -427,12 +427,14 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                                             size: 14,
                                           ),
                                           const SizedBox(width: 6),
-                                          Text(
-                                            'Serviceable (${serviceAreaAsync?.value?.areaName ?? 'Bengaluru'}) • Free delivery on orders over ₹${serviceAreaAsync?.value?.minOrderForFreeDelivery.toInt() ?? 499}',
-                                            style: const TextStyle(
-                                              color: AppColors.success,
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w600,
+                                          Expanded(
+                                            child: Text(
+                                              'Serviceable (${serviceAreaAsync?.value?.areaName ?? 'Bengaluru'}) • Free delivery on orders over ₹${serviceAreaAsync?.value?.minOrderForFreeDelivery.toInt() ?? 499}',
+                                              style: const TextStyle(
+                                                color: AppColors.success,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                              ),
                                             ),
                                           ),
                                         ],
@@ -562,23 +564,30 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                                   value: 'razorpay',
                                   activeColor: AppColors.primary,
                                 ),
-                                title: Row(
+                                title: Wrap(
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  spacing: 6,
+                                  runSpacing: 4,
                                   children: [
-                                    const Icon(
-                                      Icons.payment_rounded,
-                                      size: 18,
-                                      color: AppColors.primary,
+                                    const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.payment_rounded,
+                                          size: 18,
+                                          color: AppColors.primary,
+                                        ),
+                                        SizedBox(width: 8),
+                                        Text(
+                                          'Online Payment (Razorpay)',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 13,
+                                            color: AppColors.textPrimary,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(width: 8),
-                                    const Text(
-                                      'Online Payment (Razorpay)',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 13,
-                                        color: AppColors.textPrimary,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
                                     Container(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 6,
@@ -638,21 +647,24 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                                     ),
                                   ),
                                   const SizedBox(width: 8),
-                                  ElevatedButton(
-                                    onPressed: _applyCoupon,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppColors.primary,
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 14,
-                                        vertical: 10,
+                                  SizedBox(
+                                    width: 80,
+                                    height: 40,
+                                    child: ElevatedButton(
+                                      onPressed: _applyCoupon,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.primary,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 14,
+                                        ),
                                       ),
-                                    ),
-                                    child: const Text(
-                                      'Apply',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
+                                      child: const Text(
+                                        'Apply',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -1053,37 +1065,40 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         borderRadius: AppDimensions.roundedMd,
         border: Border.all(color: AppColors.surfaceBorder),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              if (actionLabel != null && onAction != null)
-                InkWell(
-                  onTap: onAction,
-                  child: Text(
-                    actionLabel,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
-                    ),
+      child: Material(
+        color: Colors.transparent,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
                   ),
                 ),
-            ],
-          ),
-          const SizedBox(height: AppDimensions.sm),
-          content,
-        ],
+                if (actionLabel != null && onAction != null)
+                  InkWell(
+                    onTap: onAction,
+                    child: Text(
+                      actionLabel,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: AppDimensions.sm),
+            content,
+          ],
+        ),
       ),
     );
   }

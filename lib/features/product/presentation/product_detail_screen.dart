@@ -125,7 +125,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               ),
               IconButton(
                 icon: const Icon(Icons.shopping_bag_outlined),
-                onPressed: () => context.push(AppRoutes.cart),
+                onPressed: () => context.go(AppRoutes.cart),
               ),
             ],
           ),
@@ -402,14 +402,19 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                 if (_selectedVariant!.netWeightDisplay != null)
                                   _buildHighlightItem(
                                     Icons.scale_outlined,
-                                    _selectedVariant!.netWeightDisplay!,
+                                    (_selectedVariant!.netWeightDisplay!.split(
+                                      '|',
+                                    )[0]).replaceAll('Net wt:', '').trim(),
                                     'Net Weight',
                                   ),
                                 if (_selectedVariant!.grossWeightDisplay !=
                                     null)
                                   _buildHighlightItem(
                                     Icons.kitchen_outlined,
-                                    _selectedVariant!.grossWeightDisplay!,
+                                    (_selectedVariant!.grossWeightDisplay!
+                                        .replaceAll('Gross wt:', '')
+                                        .replaceAll('Gross:', '')
+                                        .trim()),
                                     'Gross Weight',
                                   ),
                                 if (_selectedVariant!.piecesCount != null)
@@ -617,7 +622,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                           label: 'View Cart',
                                           textColor: Colors.white,
                                           onPressed: () =>
-                                              context.push(AppRoutes.cart),
+                                              context.go(AppRoutes.cart),
                                         ),
                                       ),
                                     );
@@ -644,7 +649,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                   if (!ok && context.mounted) {
                                     _showLoginRequired(context);
                                   } else if (context.mounted) {
-                                    context.push(AppRoutes.cart);
+                                    context.go(AppRoutes.cart);
                                   }
                                 },
                         ),
@@ -714,19 +719,28 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   }
 
   Widget _buildHighlightItem(IconData icon, String value, String label) {
-    return Column(
-      children: [
-        Icon(icon, color: AppColors.primary, size: 22),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-        ),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
-        ),
-      ],
+    return Expanded(
+      child: Column(
+        children: [
+          Icon(icon, color: AppColors.primary, size: 22),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+          ),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 10,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

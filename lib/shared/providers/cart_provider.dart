@@ -1,6 +1,10 @@
+import 'dart:developer' as developer;
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/supabase/supabase_client_provider.dart';
+import '../../core/supabase/supabase_exception_mapper.dart';
 import '../../features/cart/data/cart_repository.dart';
 import '../../features/checkout/data/coupon_repository.dart';
 import '../models/cart_item.dart';
@@ -14,6 +18,7 @@ class CartState {
     this.couponDiscount = 0.0,
     this.useWallet = false,
     this.isLoading = false,
+    this.errorMessage,
   });
 
   final Map<String, CartItem>
@@ -22,6 +27,12 @@ class CartState {
   final double couponDiscount;
   final bool useWallet;
   final bool isLoading;
+  final String? errorMessage;
+
+  bool get hasError => errorMessage != null;
+  bool get isLoaded => !isLoading && errorMessage == null;
+  bool get isEmpty => items.isEmpty;
+  bool get isEmptyLoaded => isLoaded && items.isEmpty;
 
   int get totalItemCount =>
       items.values.fold(0, (sum, item) => sum + item.quantity);
@@ -41,14 +52,14 @@ class CartState {
     return raw > 0 ? raw : 0.0;
   }
 
-  bool get isEmpty => items.isEmpty;
-
   CartState copyWith({
     Map<String, CartItem>? items,
     String? appliedCouponCode,
     double? couponDiscount,
     bool? useWallet,
     bool? isLoading,
+    String? errorMessage,
+    bool clearError = false,
   }) {
     return CartState(
       items: items ?? this.items,
@@ -56,11 +67,14 @@ class CartState {
       couponDiscount: couponDiscount ?? this.couponDiscount,
       useWallet: useWallet ?? this.useWallet,
       isLoading: isLoading ?? this.isLoading,
+      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );
   }
 }
 
 class CartNotifier extends Notifier<CartState> {
+  Future<void>? _currentLoadFuture;
+
   @override
   CartState build() {
     final user = ref.watch(currentUserProvider);
@@ -73,11 +87,27 @@ class CartNotifier extends Notifier<CartState> {
   }
 
   Future<void> loadCart() async {
+    if (_currentLoadFuture != null) {
+      return _currentLoadFuture!;
+    }
+
+    final future = _performLoadCart();
+    _currentLoadFuture = future;
+    try {
+      await future;
+    } finally {
+      _currentLoadFuture = null;
+    }
+  }
+
+  Future<void> _performLoadCart() async {
     final user = ref.read(currentUserProvider);
     if (user == null) {
       state = const CartState();
       return;
     }
+
+    state = state.copyWith(isLoading: true, clearError: true);
 
     try {
       final repo = ref.read(cartRepositoryProvider);
@@ -87,9 +117,20 @@ class CartNotifier extends Notifier<CartState> {
         final key = '${item.product.id}_${item.selectedVariant.id}';
         map[key] = item;
       }
-      state = state.copyWith(items: map, isLoading: false);
-    } catch (_) {
-      state = state.copyWith(isLoading: false);
+      state = state.copyWith(items: map, isLoading: false, clearError: true);
+    } catch (e, st) {
+      if (kDebugMode) {
+        developer.log(
+          'Cart load error: $e',
+          error: e,
+          stackTrace: st,
+          name: 'CartNotifier',
+        );
+      }
+      final userMessage = e is AppException
+          ? e.message
+          : 'Unable to load shopping cart. Please check your connection and retry.';
+      state = state.copyWith(isLoading: false, errorMessage: userMessage);
     }
   }
 

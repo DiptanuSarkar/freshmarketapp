@@ -35,6 +35,82 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final cartNotifier = ref.read(cartProvider.notifier);
     final selectedAddress = ref.watch(selectedAddressProvider);
 
+    // 1. Loading state with empty items
+    if (cartState.isLoading && cartState.items.isEmpty) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(title: const Text('My Cart')),
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(color: AppColors.primary),
+              SizedBox(height: 16),
+              Text(
+                'Loading your fresh cart...',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // 2. Error state with professional retry UI
+    if (cartState.hasError && cartState.items.isEmpty) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(title: const Text('My Cart')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(AppDimensions.xl),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.error_outline_rounded,
+                  size: 56,
+                  color: AppColors.error,
+                ),
+                const SizedBox(height: AppDimensions.md),
+                const Text(
+                  'Could Not Load Cart',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: AppDimensions.sm),
+                Text(
+                  cartState.errorMessage ?? 'We encountered an issue loading your cart. Please try again.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: AppDimensions.xl),
+                SizedBox(
+                  width: 160,
+                  child: AppButton(
+                    label: 'Retry',
+                    icon: Icons.refresh_rounded,
+                    onPressed: () => cartNotifier.loadCart(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // 3. Genuine Empty Cart state (Loaded with zero items)
     if (cartState.isEmpty) {
       return Scaffold(
         backgroundColor: AppColors.background,
@@ -276,6 +352,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                               ),
                               const SizedBox(width: AppDimensions.sm),
                               SizedBox(
+                                width: 80,
                                 height: 38,
                                 child: ElevatedButton(
                                   onPressed: () async {

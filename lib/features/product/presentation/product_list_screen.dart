@@ -59,7 +59,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.shopping_bag_outlined),
-            onPressed: () => context.push(AppRoutes.cart),
+            onPressed: () => context.go(AppRoutes.cart),
           ),
         ],
       ),

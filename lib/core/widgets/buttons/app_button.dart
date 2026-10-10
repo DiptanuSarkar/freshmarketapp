@@ -33,6 +33,13 @@ class AppButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final effectiveBorderRadius = borderRadius ?? AppDimensions.roundedMd;
 
+    final textWidget = Text(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+    );
+
     Widget content;
     if (isLoading) {
       content = const SizedBox(
@@ -52,10 +59,7 @@ class AppButton extends StatelessWidget {
             Icon(icon, size: 18),
             const SizedBox(width: AppDimensions.sm),
           ],
-          Text(
-            label,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-          ),
+          width != null ? Flexible(child: textWidget) : textWidget,
           if (trailingIcon != null) ...[
             const SizedBox(width: AppDimensions.sm),
             Icon(trailingIcon, size: 18),

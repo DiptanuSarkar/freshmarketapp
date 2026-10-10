@@ -112,30 +112,53 @@ class SupabaseCartRepository implements ICartRepository {
       final result = <CartItem>[];
 
       for (final raw in list) {
-        final itemMap = raw as Map<String, dynamic>;
-        final variantMap = itemMap['product_variants'] as Map<String, dynamic>?;
+        if (raw is! Map) continue;
+        final itemMap = raw.cast<String, dynamic>();
+
+        // Normalize product_variants relationship (Map or List)
+        Map<String, dynamic>? variantMap;
+        final rawVariant = itemMap['product_variants'];
+        if (rawVariant is Map) {
+          variantMap = rawVariant.cast<String, dynamic>();
+        } else if (rawVariant is List &&
+            rawVariant.isNotEmpty &&
+            rawVariant.first is Map) {
+          variantMap = (rawVariant.first as Map).cast<String, dynamic>();
+        }
         if (variantMap == null) continue;
 
-        final productMap = variantMap['products'] as Map<String, dynamic>?;
+        // Normalize products relationship (Map or List)
+        Map<String, dynamic>? productMap;
+        final rawProduct = variantMap['products'];
+        if (rawProduct is Map) {
+          productMap = rawProduct.cast<String, dynamic>();
+        } else if (rawProduct is List &&
+            rawProduct.isNotEmpty &&
+            rawProduct.first is Map) {
+          productMap = (rawProduct.first as Map).cast<String, dynamic>();
+        }
         if (productMap == null) continue;
 
         final isProductActive = productMap['is_active'] as bool? ?? true;
 
-        // Inventory & stock
+        // Inventory & stock (normalize List or Map, safe num conversions)
         int stock = 0;
-        if (variantMap['inventory'] != null) {
-          if (variantMap['inventory'] is List &&
-              (variantMap['inventory'] as List).isNotEmpty) {
-            final inv =
-                (variantMap['inventory'] as List).first as Map<String, dynamic>;
-            stock =
-                (inv['quantity_available'] as int? ?? 0) -
-                (inv['reserved_quantity'] as int? ?? 0);
-          } else if (variantMap['inventory'] is Map) {
-            final inv = variantMap['inventory'] as Map<String, dynamic>;
-            stock =
-                (inv['quantity_available'] as int? ?? 0) -
-                (inv['reserved_quantity'] as int? ?? 0);
+        final rawInventory = variantMap['inventory'];
+        if (rawInventory != null) {
+          Map<String, dynamic>? inv;
+          if (rawInventory is List &&
+              rawInventory.isNotEmpty &&
+              rawInventory.first is Map) {
+            inv = (rawInventory.first as Map).cast<String, dynamic>();
+          } else if (rawInventory is Map) {
+            inv = rawInventory.cast<String, dynamic>();
+          }
+          if (inv != null) {
+            final qtyAvailable =
+                (inv['quantity_available'] as num?)?.toInt() ?? 0;
+            final qtyReserved =
+                (inv['reserved_quantity'] as num?)?.toInt() ?? 0;
+            stock = qtyAvailable - qtyReserved;
           }
         }
         if (stock < 0) stock = 0;
@@ -143,11 +166,18 @@ class SupabaseCartRepository implements ICartRepository {
         final isVariantActive = variantMap['is_active'] as bool? ?? true;
         final isAvailable = isVariantActive && isProductActive && stock > 0;
 
-        final price = (variantMap['price'] as num).toDouble();
+        final price = (variantMap['price'] as num?)?.toDouble() ?? 0.0;
         final discountedPrice = (variantMap['discounted_price'] as num?)
             ?.toDouble();
-        final sellingPrice = discountedPrice ?? price;
-        final originalPrice = discountedPrice != null ? price : null;
+        final sellingPrice = (discountedPrice != null && discountedPrice > 0)
+            ? discountedPrice
+            : price;
+        final originalPrice =
+            (discountedPrice != null &&
+                discountedPrice > 0 &&
+                discountedPrice < price)
+            ? price
+            : null;
 
         // Weight parsing
         double weightInGrams = 500;
@@ -171,7 +201,7 @@ class SupabaseCartRepository implements ICartRepository {
         }
 
         final variant = ProductVariant(
-          id: variantMap['id'] as String,
+          id: variantMap['id'] as String? ?? '',
           sku: variantMap['sku'] as String? ?? 'SKU-${variantMap['id']}',
           title: variantMap['name'] as String? ?? 'Standard',
           weightInGrams: weightInGrams,
@@ -180,18 +210,22 @@ class SupabaseCartRepository implements ICartRepository {
           stockQuantity: stock,
           isAvailable: isAvailable,
           netWeightDisplay: netWeightDisplay,
+          grossWeightDisplay: gross,
+          piecesCount: variantMap['pieces_count'] as String?,
+          serves: variantMap['serves'] as String?,
         );
 
-        // Images
+        // Images safely mapped and sorted
         final imagesList = <String>[];
-        if (productMap['product_images'] != null &&
-            productMap['product_images'] is List) {
-          final rawImgs = List<Map<String, dynamic>>.from(
-            productMap['product_images'] as List,
-          );
+        final rawImages = productMap['product_images'];
+        if (rawImages is List && rawImages.isNotEmpty) {
+          final rawImgs = rawImages
+              .whereType<Map>()
+              .map((m) => m.cast<String, dynamic>())
+              .toList();
           rawImgs.sort(
-            (a, b) => (a['display_order'] as int? ?? 0).compareTo(
-              b['display_order'] as int? ?? 0,
+            (a, b) => ((a['display_order'] as num?)?.toInt() ?? 0).compareTo(
+              (b['display_order'] as num?)?.toInt() ?? 0,
             ),
           );
           for (final img in rawImgs) {
@@ -200,21 +234,26 @@ class SupabaseCartRepository implements ICartRepository {
           }
         }
 
+        // Categories safely mapped (Map or List)
         String catSlug = '';
-        if (productMap['categories'] != null &&
-            productMap['categories'] is Map) {
-          catSlug = productMap['categories']['slug'] as String? ?? '';
+        final rawCategory = productMap['categories'];
+        if (rawCategory is Map) {
+          catSlug = rawCategory['slug'] as String? ?? '';
+        } else if (rawCategory is List &&
+            rawCategory.isNotEmpty &&
+            rawCategory.first is Map) {
+          catSlug = (rawCategory.first as Map)['slug'] as String? ?? '';
         }
 
         final product = Product(
-          id: productMap['id'] as String,
-          name: productMap['name'] as String,
+          id: productMap['id'] as String? ?? '',
+          name: productMap['name'] as String? ?? 'Fresh Meat & Groceries',
           categorySlug: catSlug,
           shortDescription: productMap['short_description'] as String? ?? '',
           description: productMap['description'] as String? ?? '',
           images: imagesList.isNotEmpty
               ? imagesList
-              : [
+              : const [
                   'https://images.unsplash.com/photo-1587593810167-a84920ea0781?auto=format&fit=crop&w=400&q=80',
                 ],
           variants: [variant],
@@ -222,10 +261,10 @@ class SupabaseCartRepository implements ICartRepository {
 
         result.add(
           CartItem(
-            id: itemMap['id'] as String,
+            id: itemMap['id'] as String?,
             product: product,
             selectedVariant: variant,
-            quantity: itemMap['quantity'] as int? ?? 1,
+            quantity: (itemMap['quantity'] as num?)?.toInt() ?? 1,
           ),
         );
       }
@@ -262,7 +301,7 @@ class SupabaseCartRepository implements ICartRepository {
           .maybeSingle();
 
       if (existing != null) {
-        final currentQty = existing['quantity'] as int? ?? 0;
+        final currentQty = (existing['quantity'] as num?)?.toInt() ?? 0;
         final newQty = currentQty + quantity;
         await _supabase
             .from(SupabaseTables.cartItems)

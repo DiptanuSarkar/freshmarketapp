@@ -29,7 +29,7 @@ class WishlistScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.shopping_bag_outlined),
-            onPressed: () => context.push(AppRoutes.cart),
+            onPressed: () => context.go(AppRoutes.cart),
           ),
         ],
       ),
