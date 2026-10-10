@@ -107,6 +107,47 @@ class OrderDetailScreen extends ConsumerWidget {
                                   ),
                                 ),
                               ],
+                              if (order.refundStatus != null) ...[
+                                const SizedBox(height: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: order.refundStatus == 'completed'
+                                        ? AppColors.successContainer
+                                        : AppColors.primaryContainer,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        order.refundStatus == 'completed'
+                                            ? Icons.check_circle_rounded
+                                            : Icons.sync,
+                                        size: 14,
+                                        color: order.refundStatus == 'completed'
+                                            ? AppColors.success
+                                            : AppColors.primary,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Refund ${order.refundStatus!.toUpperCase()}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color:
+                                              order.refundStatus == 'completed'
+                                                  ? AppColors.success
+                                                  : AppColors.primaryDark,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -436,10 +477,14 @@ class OrderDetailScreen extends ConsumerWidget {
                       const SizedBox(height: AppDimensions.sm),
                       _buildPriceRow(
                         'Payment Method',
-                        order.paymentMethod == 'RAZORPAY' ||
-                                order.paymentMethod == 'ONLINE'
-                            ? 'Online Payment (Razorpay)'
-                            : order.paymentMethod,
+                        order.paymentMethod == 'WALLET'
+                            ? 'FreshMarket Wallet'
+                            : (order.paymentMethod == 'MIXED'
+                                ? 'Wallet + Online (Razorpay)'
+                                : (order.paymentMethod == 'RAZORPAY' ||
+                                        order.paymentMethod == 'ONLINE'
+                                    ? 'Online Payment (Razorpay)'
+                                    : order.paymentMethod)),
                       ),
                       _buildPriceRow(
                         'Payment Status',
@@ -451,6 +496,26 @@ class OrderDetailScreen extends ConsumerWidget {
                                   : AppColors.warning),
                         isBold: true,
                       ),
+                      if (order.walletAmountUsed > 0)
+                        _buildPriceRow(
+                          'Wallet Paid',
+                          '${AppStrings.currencySymbol}${order.walletAmountUsed.toStringAsFixed(0)}',
+                          color: AppColors.primary,
+                        ),
+                      if (order.gatewayAmount > 0)
+                        _buildPriceRow(
+                          'Online Paid',
+                          '${AppStrings.currencySymbol}${order.gatewayAmount.toStringAsFixed(0)}',
+                        ),
+                      if (order.refundStatus != null)
+                        _buildPriceRow(
+                          'Refund Lifecycle',
+                          order.refundStatus!.toUpperCase(),
+                          color: order.refundStatus == 'completed'
+                              ? AppColors.success
+                              : AppColors.primary,
+                          isBold: true,
+                        ),
                     ],
                   ),
                 ),

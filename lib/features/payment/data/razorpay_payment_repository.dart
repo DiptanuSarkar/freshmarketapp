@@ -22,6 +22,7 @@ abstract interface class IRazorpayPaymentRepository {
     required String deliverySlotId,
     String? couponCode,
     String? customerNotes,
+    bool? useWallet,
   });
 
   Future<RazorpayOrderModel> retryRazorpayOrder({required String orderId});
@@ -50,6 +51,7 @@ class SupabaseRazorpayPaymentRepository implements IRazorpayPaymentRepository {
     required String deliverySlotId,
     String? couponCode,
     String? customerNotes,
+    bool? useWallet,
   }) async {
     try {
       final response = await _supabase.functions.invoke(
@@ -62,6 +64,7 @@ class SupabaseRazorpayPaymentRepository implements IRazorpayPaymentRepository {
             'coupon_code': couponCode,
           if (customerNotes != null && customerNotes.isNotEmpty)
             'customer_notes': customerNotes,
+          'use_wallet': ?useWallet,
         },
       );
 

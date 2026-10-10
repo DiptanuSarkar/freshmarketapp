@@ -76,6 +76,7 @@ Deno.serve(async (req: Request) => {
       address_id?: string | null;
       delivery_slot_id?: string | null;
       coupon_code?: string | null;
+      use_wallet?: boolean;
     } = {};
 
     try {
@@ -89,6 +90,7 @@ Deno.serve(async (req: Request) => {
     const addressId = body.address_id ?? null;
     const deliverySlotId = body.delivery_slot_id ?? null;
     const couponCode = body.coupon_code ? body.coupon_code.trim() : null;
+    const useWallet = Boolean(body.use_wallet);
 
     // 3. Call server-authoritative calculation RPC using service_role
     const adminClient = createClient(supabaseUrl, serviceRoleKey, {
@@ -102,6 +104,7 @@ Deno.serve(async (req: Request) => {
         p_address_id: addressId,
         p_delivery_slot_id: deliverySlotId,
         p_coupon_code: couponCode,
+        p_use_wallet: useWallet,
       }
     );
 

@@ -206,7 +206,7 @@ Deno.serve(async (req: Request) => {
     // 4. Load latest payment record for this order
     const { data: payment, error: paymentError } = await adminClient
       .from("payments")
-      .select("id, order_id, amount, status, gateway_order_id")
+      .select("id, order_id, amount, status, gateway_order_id, payment_method, wallet_amount, gateway_amount")
       .eq("order_id", internal_order_id)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -326,8 +326,12 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Verify amount in paise
-    const expectedPaise = Math.round(Number(payment.amount) * 100);
+    // Verify amount in paise (for mixed payments, compare against gateway_amount)
+    const isMixed = payment.payment_method === "mixed";
+    const expectedPaise = isMixed
+      ? Math.round(Number(payment.gateway_amount ?? payment.amount) * 100)
+      : Math.round(Number(payment.amount) * 100);
+
     if (rzPayment.amount !== expectedPaise) {
       console.error(
         `Amount mismatch: expected ${expectedPaise} paise, got ${rzPayment.amount}`
@@ -362,31 +366,61 @@ Deno.serve(async (req: Request) => {
     }
 
     // 7. Atomic confirmation in PostgreSQL
-    const { data: confirmResult, error: confirmError } = await adminClient.rpc(
-      "rpc_confirm_razorpay_payment_atomic",
-      {
-        p_order_id: internal_order_id,
-        p_gateway_payment_id: razorpay_payment_id,
-        p_gateway_order_id: storedGatewayOrderId,
-        p_gateway_signature: razorpay_signature,
-        p_gateway_method: rzPayment.method || "online",
-        p_gateway_status: rzPayment.status,
-      }
-    );
-
-    if (confirmError) {
-      console.error("rpc_confirm_razorpay_payment_atomic failed:", confirmError);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error_code: "CONFIRMATION_FAILED",
-          message: "Failed to confirm payment in database. Please check payment status.",
-        }),
+    if (isMixed) {
+      const { error: confirmError } = await adminClient.rpc(
+        "rpc_confirm_mixed_payment_atomic",
         {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          p_order_id: internal_order_id,
+          p_gateway_payment_id: razorpay_payment_id,
+          p_gateway_order_id: storedGatewayOrderId,
+          p_gateway_signature: razorpay_signature,
+          p_gateway_method: rzPayment.method || "online",
+          p_gateway_status: rzPayment.status,
+          p_amount_paise: expectedPaise,
         }
       );
+
+      if (confirmError) {
+        console.error("rpc_confirm_mixed_payment_atomic failed:", confirmError);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error_code: "CONFIRMATION_FAILED",
+            message: "Failed to confirm mixed payment in database. Please check payment status.",
+          }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+    } else {
+      const { error: confirmError } = await adminClient.rpc(
+        "rpc_confirm_razorpay_payment_atomic",
+        {
+          p_order_id: internal_order_id,
+          p_gateway_payment_id: razorpay_payment_id,
+          p_gateway_order_id: storedGatewayOrderId,
+          p_gateway_signature: razorpay_signature,
+          p_gateway_method: rzPayment.method || "online",
+          p_gateway_status: rzPayment.status,
+        }
+      );
+
+      if (confirmError) {
+        console.error("rpc_confirm_razorpay_payment_atomic failed:", confirmError);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error_code: "CONFIRMATION_FAILED",
+            message: "Failed to confirm payment in database. Please check payment status.",
+          }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
     }
 
     return new Response(

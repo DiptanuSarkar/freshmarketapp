@@ -66,6 +66,11 @@ class CheckoutQuote {
     required this.platformFee,
     required this.taxAmount,
     required this.walletAmount,
+    this.walletBalance = 0.0,
+    this.walletAvailable = 0.0,
+    this.walletAmountApplied = 0.0,
+    this.gatewayPayable = 0.0,
+    this.isWalletOnly = false,
     required this.grandTotal,
     required this.codPayableTotal,
     required this.stockValid,
@@ -90,6 +95,11 @@ class CheckoutQuote {
   final double platformFee;
   final double taxAmount;
   final double walletAmount;
+  final double walletBalance;
+  final double walletAvailable;
+  final double walletAmountApplied;
+  final double gatewayPayable;
+  final bool isWalletOnly;
   final double grandTotal;
   final double codPayableTotal;
   final bool stockValid;
@@ -106,6 +116,10 @@ class CheckoutQuote {
         .map((e) => CheckoutQuoteItem.fromJson(e as Map<String, dynamic>))
         .toList();
 
+    final gTotal = (json['grand_total'] as num?)?.toDouble() ?? 0.0;
+    final wApplied = ((json['wallet_amount_applied'] ?? json['wallet_amount']) as num?)?.toDouble() ?? 0.0;
+    final gPayable = ((json['gateway_payable'] ?? (gTotal - wApplied)) as num?)?.toDouble() ?? gTotal;
+
     return CheckoutQuote(
       cartId: json['cart_id'] as String? ?? '',
       items: itemsList,
@@ -119,8 +133,13 @@ class CheckoutQuote {
       deliveryFee: (json['delivery_fee'] as num?)?.toDouble() ?? 0.0,
       platformFee: (json['platform_fee'] as num?)?.toDouble() ?? 0.0,
       taxAmount: (json['tax_amount'] as num?)?.toDouble() ?? 0.0,
-      walletAmount: (json['wallet_amount'] as num?)?.toDouble() ?? 0.0,
-      grandTotal: (json['grand_total'] as num?)?.toDouble() ?? 0.0,
+      walletAmount: wApplied,
+      walletBalance: (json['wallet_balance'] as num?)?.toDouble() ?? 0.0,
+      walletAvailable: (json['wallet_available'] as num?)?.toDouble() ?? 0.0,
+      walletAmountApplied: wApplied,
+      gatewayPayable: gPayable,
+      isWalletOnly: json['is_wallet_only'] as bool? ?? (gPayable <= 0 && wApplied > 0),
+      grandTotal: gTotal,
       codPayableTotal:
           ((json['cod_payable_total'] ?? json['cod_payable']) as num?)
               ?.toDouble() ??

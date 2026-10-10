@@ -71,13 +71,14 @@ class RazorpayController extends Notifier<RazorpayCheckoutState> {
     _razorpay!.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
   }
 
-  /// Start Online Checkout flow from Authoritative Cart
+  /// Start Online / Mixed / Wallet Checkout flow from Authoritative Cart
   Future<void> startCheckout({
     required String checkoutRequestId,
     required String addressId,
     required String deliverySlotId,
     String? couponCode,
     String? customerNotes,
+    bool? useWallet,
   }) async {
     state = const RazorpayStateInitializing();
     final repo = ref.read(razorpayPaymentRepositoryProvider);
@@ -89,10 +90,28 @@ class RazorpayController extends Notifier<RazorpayCheckoutState> {
         deliverySlotId: deliverySlotId,
         couponCode: couponCode,
         customerNotes: customerNotes,
+        useWallet: useWallet,
       );
 
       _currentInternalOrderId = orderModel.internalOrderId;
       _currentRazorpayOrderId = orderModel.razorpayOrderId;
+
+      // If wallet completely covered the order, direct confirmation without opening SDK
+      if (orderModel.isWalletOnly) {
+        state = RazorpayStateSuccess(
+          PaymentVerificationResult(
+            success: true,
+            verified: true,
+            captured: true,
+            internalOrderId: orderModel.internalOrderId,
+            orderNumber: orderModel.internalOrderNumber,
+            status: 'confirmed',
+            paymentStatus: 'completed',
+          ),
+        );
+        return;
+      }
+
       state = RazorpayStateCheckoutOpen(orderModel);
 
       // Open Razorpay Standard Checkout SDK

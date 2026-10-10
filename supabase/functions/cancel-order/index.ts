@@ -125,11 +125,120 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 3. Execute atomic cancellation transaction in PostgreSQL
+    // 3. Check order payment status to determine cancellation path
     const adminClient = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false },
     });
 
+    const { data: order, error: orderFetchError } = await adminClient
+      .from("orders")
+      .select("id, status, payment_status, payment_method, total")
+      .eq("id", orderId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (orderFetchError || !order) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error_code: "ORDER_NOT_FOUND",
+          message: "Order was not found or does not belong to your account.",
+        }),
+        {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // A. Paid Order Refund Flow
+    if (order.payment_status === "completed") {
+      const refundRequestId = `RFND-REQ-${orderId}-${Date.now()}`;
+      const { data: refundResult, error: prepRefundError } = await adminClient.rpc(
+        "rpc_prepare_order_cancellation_refund_atomic",
+        {
+          p_user_id: user.id,
+          p_order_id: orderId,
+          p_reason: reason,
+          p_refund_request_id: refundRequestId,
+        }
+      );
+
+      if (prepRefundError) {
+        console.error("rpc_prepare_order_cancellation_refund_atomic failed:", prepRefundError);
+        const mapped = mapCancelError(prepRefundError.message || "");
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error_code: mapped.code,
+            message: mapped.message,
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      // If online/gateway portion exists, invoke Razorpay Refunds API
+      if (refundResult.requires_gateway_refund && refundResult.gateway_payment_id) {
+        const razorpayKeyId = Deno.env.get("RAZORPAY_KEY_ID") ?? "";
+        const razorpayKeySecret = Deno.env.get("RAZORPAY_KEY_SECRET") ?? "";
+
+        if (razorpayKeyId && razorpayKeySecret) {
+          const basicAuth = btoa(`${razorpayKeyId}:${razorpayKeySecret}`);
+          try {
+            const rzRefundRes = await fetch(
+              `https://api.razorpay.com/v1/payments/${refundResult.gateway_payment_id}/refund`,
+              {
+                method: "POST",
+                headers: {
+                  Authorization: `Basic ${basicAuth}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  amount: Math.round(Number(refundResult.gateway_refund_amount) * 100),
+                  speed: "optimum",
+                  notes: {
+                    freshmarket_order_id: refundResult.order_id,
+                    freshmarket_refund_id: refundResult.refund_id,
+                  },
+                  receipt: `RFND-${refundResult.order_number}`.substring(0, 40),
+                }),
+              }
+            );
+
+            if (rzRefundRes.ok) {
+              const rzRefund = await rzRefundRes.json();
+              await adminClient.rpc("rpc_record_gateway_refund_submission_atomic", {
+                p_refund_id: refundResult.refund_id,
+                p_gateway_refund_id: rzRefund.id,
+                p_provider_status: rzRefund.status || "processed",
+              });
+            } else {
+              const rzErrText = await rzRefundRes.text();
+              console.error("Razorpay refund creation failed:", rzRefundRes.status, rzErrText);
+              await adminClient.rpc("rpc_record_gateway_refund_submission_atomic", {
+                p_refund_id: refundResult.refund_id,
+                p_gateway_refund_id: null,
+                p_provider_status: "failed",
+                p_error_code: `RZ_HTTP_${rzRefundRes.status}`,
+                p_error_message: rzErrText,
+              });
+            }
+          } catch (rzErr) {
+            console.error("Razorpay refund network error:", rzErr);
+          }
+        }
+      }
+
+      return new Response(JSON.stringify(refundResult), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // B. Unpaid / COD Order Cancellation Flow
     const { data: cancelResult, error: rpcError } = await adminClient.rpc(
       "rpc_cancel_order_atomic",
       {

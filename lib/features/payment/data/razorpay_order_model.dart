@@ -11,6 +11,10 @@ class RazorpayOrderModel {
     this.prefillEmail,
     this.prefillContact,
     this.isIdempotentRetry = false,
+    this.paymentMethod = 'online_razorpay',
+    this.walletAmount = 0.0,
+    this.gatewayAmount = 0.0,
+    this.isWalletOnly = false,
   });
 
   final String internalOrderId;
@@ -24,6 +28,10 @@ class RazorpayOrderModel {
   final String? prefillEmail;
   final String? prefillContact;
   final bool isIdempotentRetry;
+  final String paymentMethod;
+  final double walletAmount;
+  final double gatewayAmount;
+  final bool isWalletOnly;
 
   double get amountRupees => amountPaise / 100.0;
 
@@ -34,14 +42,20 @@ class RazorpayOrderModel {
       internalOrderNumber:
           json['internal_order_number'] as String? ?? 'FM-ORDER',
       paymentId: json['payment_id'] as String,
-      razorpayOrderId: json['razorpay_order_id'] as String,
-      razorpayKeyId: json['razorpay_key_id'] as String,
-      amountPaise: (json['amount_paise'] as num).toInt(),
+      razorpayOrderId: json['razorpay_order_id'] as String? ?? '',
+      razorpayKeyId:
+          (json['razorpay_key_id'] ?? json['key_id']) as String? ?? '',
+      amountPaise:
+          ((json['amount_paise'] ?? json['amount']) as num?)?.toInt() ?? 0,
       currency: json['currency'] as String? ?? 'INR',
       prefillName: prefill?['name'] as String?,
       prefillEmail: prefill?['email'] as String?,
       prefillContact: prefill?['contact'] as String?,
       isIdempotentRetry: json['is_idempotent_retry'] as bool? ?? false,
+      paymentMethod: json['payment_method'] as String? ?? 'online_razorpay',
+      walletAmount: (json['wallet_amount'] as num?)?.toDouble() ?? 0.0,
+      gatewayAmount: (json['gateway_amount'] as num?)?.toDouble() ?? 0.0,
+      isWalletOnly: json['is_wallet_only'] as bool? ?? false,
     );
   }
 

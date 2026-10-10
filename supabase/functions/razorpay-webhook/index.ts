@@ -159,14 +159,17 @@ Deno.serve(async (req: Request) => {
         // Find matching FreshMarket pending payment by gateway_order_id
         const { data: dbPayment } = await adminClient
           .from("payments")
-          .select("id, order_id, amount, status")
+          .select("id, order_id, amount, status, payment_method, wallet_amount, gateway_amount")
           .eq("gateway_order_id", rzOrderId)
           .order("created_at", { ascending: false })
           .limit(1)
           .single();
 
         if (dbPayment) {
-          const expectedPaise = Math.round(Number(dbPayment.amount) * 100);
+          const isMixed = dbPayment.payment_method === "mixed";
+          const expectedPaise = isMixed
+            ? Math.round(Number(dbPayment.gateway_amount ?? dbPayment.amount) * 100)
+            : Math.round(Number(dbPayment.amount) * 100);
 
           // Verify amount and currency
           if (
@@ -174,14 +177,26 @@ Deno.serve(async (req: Request) => {
             paymentEntity.amount === expectedPaise
           ) {
             // Atomically confirm payment
-            await adminClient.rpc("rpc_confirm_razorpay_payment_atomic", {
-              p_order_id: dbPayment.order_id,
-              p_gateway_payment_id: rzPaymentId,
-              p_gateway_order_id: rzOrderId,
-              p_gateway_signature: null,
-              p_gateway_method: paymentEntity.method || "webhook",
-              p_gateway_status: paymentEntity.status || "captured",
-            });
+            if (isMixed) {
+              await adminClient.rpc("rpc_confirm_mixed_payment_atomic", {
+                p_order_id: dbPayment.order_id,
+                p_gateway_payment_id: rzPaymentId,
+                p_gateway_order_id: rzOrderId,
+                p_gateway_signature: null,
+                p_gateway_method: paymentEntity.method || "webhook",
+                p_gateway_status: paymentEntity.status || "captured",
+                p_amount_paise: expectedPaise,
+              });
+            } else {
+              await adminClient.rpc("rpc_confirm_razorpay_payment_atomic", {
+                p_order_id: dbPayment.order_id,
+                p_gateway_payment_id: rzPaymentId,
+                p_gateway_order_id: rzOrderId,
+                p_gateway_signature: null,
+                p_gateway_method: paymentEntity.method || "webhook",
+                p_gateway_status: paymentEntity.status || "captured",
+              });
+            }
 
             await adminClient
               .from("payment_webhook_events")
@@ -225,6 +240,33 @@ Deno.serve(async (req: Request) => {
               processed_at: new Date().toISOString(),
             })
               .eq("event_key", eventKey);
+        }
+      }
+    } else if (eventType === "refund.processed" || eventType === "refund.failed") {
+      const refundEntity = (event.payload as Record<string, any>)?.refund?.entity;
+      if (refundEntity && refundEntity.id) {
+        const { data: refundComp } = await adminClient
+          .from("refund_components")
+          .select("id, refund_id")
+          .eq("gateway_refund_id", refundEntity.id)
+          .maybeSingle();
+
+        if (refundComp) {
+          await adminClient.rpc("rpc_record_gateway_refund_submission_atomic", {
+            p_refund_id: refundComp.refund_id,
+            p_gateway_refund_id: refundEntity.id,
+            p_provider_status: refundEntity.status === "processed" ? "processed" : "failed",
+            p_error_code: refundEntity.status === "failed" ? (refundEntity.error_code || "REFUND_FAILED") : null,
+            p_error_message: refundEntity.status === "failed" ? (refundEntity.error_description || "Razorpay refund failed") : null,
+          });
+
+          await adminClient
+            .from("payment_webhook_events")
+            .update({
+              processing_status: "processed",
+              processed_at: new Date().toISOString(),
+            })
+            .eq("event_key", eventKey);
         }
       }
     } else {

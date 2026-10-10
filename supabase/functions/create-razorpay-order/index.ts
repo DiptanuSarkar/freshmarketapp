@@ -180,6 +180,7 @@ Deno.serve(async (req: Request) => {
       delivery_slot_id?: string;
       coupon_code?: string | null;
       customer_notes?: string | null;
+      use_wallet?: boolean;
     };
 
     try {
@@ -407,42 +408,179 @@ Deno.serve(async (req: Request) => {
       delivery_address_snapshot: Record<string, unknown>;
     };
 
-    // If idempotent retry and gateway order ID is already assigned, return it
-    if (orderData.is_idempotent_retry && orderData.gateway_order_id) {
-      const recipientName =
-        (orderData.delivery_address_snapshot?.recipient_name as string) ||
-        user.user_metadata?.full_name ||
-        "Customer";
-      const contactPhone =
-        (orderData.delivery_address_snapshot?.phone as string) ||
-        user.phone ||
-        "";
+    let walletAmount = 0.0;
+    let gatewayAmount = orderData.amount_paise / 100;
+    let amountToChargePaise = orderData.amount_paise;
+    let paymentMethod = "online_razorpay";
 
-      return new Response(
-        JSON.stringify({
-          success: true,
-          is_idempotent_retry: true,
-          internal_order_id: orderData.id,
-          internal_order_number: orderData.order_number,
-          payment_id: orderData.payment_id,
-          razorpay_order_id: orderData.gateway_order_id,
-          razorpay_key_id: razorpayKeyId,
-          amount_paise: orderData.amount_paise,
-          currency: "INR",
-          prefill: {
-            name: recipientName,
-            email: user.email || "",
-            contact: contactPhone,
-          },
-        }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+    // If idempotent retry, fetch existing payment details to preserve wallet/gateway breakdown
+    if (orderData.is_idempotent_retry) {
+      const { data: existingPayment } = await adminClient
+        .from("payments")
+        .select("wallet_amount, gateway_amount, payment_method, gateway_order_id")
+        .eq("id", orderData.payment_id)
+        .maybeSingle();
+
+      if (existingPayment) {
+        walletAmount = Number(existingPayment.wallet_amount || 0);
+        gatewayAmount = Number(existingPayment.gateway_amount ?? gatewayAmount);
+        amountToChargePaise = Math.round(gatewayAmount * 100);
+        paymentMethod = existingPayment.payment_method || paymentMethod;
+      }
+
+      // If gateway order ID is already assigned, return immediately
+      if (orderData.gateway_order_id || existingPayment?.gateway_order_id) {
+        const recipientName =
+          (orderData.delivery_address_snapshot?.recipient_name as string) ||
+          user.user_metadata?.full_name ||
+          "Customer";
+        const contactPhone =
+          (orderData.delivery_address_snapshot?.phone as string) ||
+          user.phone ||
+          "";
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            is_idempotent_retry: true,
+            internal_order_id: orderData.id,
+            internal_order_number: orderData.order_number,
+            payment_id: orderData.payment_id,
+            razorpay_order_id: orderData.gateway_order_id || existingPayment?.gateway_order_id,
+            razorpay_key_id: razorpayKeyId,
+            amount_paise: amountToChargePaise,
+            total_order_amount: orderData.amount_paise / 100,
+            wallet_amount: walletAmount,
+            gateway_amount: gatewayAmount,
+            payment_method: paymentMethod,
+            is_wallet_only: paymentMethod === "wallet",
+            currency: "INR",
+            prefill: {
+              name: recipientName,
+              email: user.email || "",
+              contact: contactPhone,
+            },
+          }),
+          {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
     }
 
-    // Call external Razorpay Orders API server-side
+    // If use_wallet requested and not already reserved
+    if (body.use_wallet) {
+      const { data: reserveResult, error: reserveError } = await adminClient.rpc(
+        "rpc_reserve_wallet_for_order_atomic",
+        {
+          p_user_id: user.id,
+          p_order_id: orderData.id,
+        }
+      );
+
+      if (reserveError) {
+        console.error("rpc_reserve_wallet_for_order_atomic failed in create-razorpay-order:", reserveError);
+        await adminClient.rpc("rpc_fail_razorpay_initialization_atomic", {
+          p_order_id: orderData.id,
+          p_reason: `Wallet reservation failed: ${reserveError.message}`,
+        });
+        const mapped = mapErrorToResponse(reserveError.message);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error_code: mapped.code,
+            message: mapped.message,
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      const reserveData = reserveResult as {
+        success: boolean;
+        wallet_amount: number;
+        gateway_amount: number;
+        gateway_paise: number;
+        is_wallet_only: boolean;
+        payment_method: string;
+      };
+
+      walletAmount = Number(reserveData.wallet_amount || 0);
+      gatewayAmount = Number(reserveData.gateway_amount || 0);
+      amountToChargePaise = Number(reserveData.gateway_paise || 0);
+      paymentMethod = reserveData.payment_method || (gatewayAmount > 0 ? "mixed" : "wallet");
+
+      // If wallet completely covers the order, confirm wallet-only directly
+      if (reserveData.is_wallet_only || gatewayAmount <= 0) {
+        const { error: confirmError } = await adminClient.rpc(
+          "rpc_confirm_wallet_only_order_atomic",
+          {
+            p_user_id: user.id,
+            p_order_id: orderData.id,
+          }
+        );
+
+        if (confirmError) {
+          console.error("rpc_confirm_wallet_only_order_atomic failed:", confirmError);
+          await adminClient.rpc("rpc_fail_razorpay_initialization_atomic", {
+            p_order_id: orderData.id,
+            p_reason: `Wallet confirmation failed: ${confirmError.message}`,
+          });
+          const mapped = mapErrorToResponse(confirmError.message);
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error_code: mapped.code,
+              message: mapped.message,
+            }),
+            {
+              status: 400,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            }
+          );
+        }
+
+        // Clear cart for confirmed wallet order
+        const { data: userCart } = await adminClient
+          .from("carts")
+          .select("id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (userCart) {
+          await adminClient.from("cart_items").delete().eq("cart_id", userCart.id);
+          await adminClient
+            .from("carts")
+            .update({ applied_coupon_id: null, updated_at: new Date().toISOString() })
+            .eq("id", userCart.id);
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            is_wallet_only: true,
+            internal_order_id: orderData.id,
+            internal_order_number: orderData.order_number,
+            payment_id: orderData.payment_id,
+            payment_method: "wallet",
+            wallet_amount: walletAmount,
+            gateway_amount: 0.0,
+            amount_paise: 0,
+            status: "confirmed",
+            payment_status: "completed",
+          }),
+          {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+    }
+
+    // Call external Razorpay Orders API server-side with remaining gateway amount
     const basicAuth = btoa(`${razorpayKeyId}:${razorpayKeySecret}`);
     const rzResponse = await fetch("https://api.razorpay.com/v1/orders", {
       method: "POST",
@@ -451,7 +589,7 @@ Deno.serve(async (req: Request) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        amount: orderData.amount_paise,
+        amount: amountToChargePaise,
         currency: "INR",
         receipt: orderData.order_number.substring(0, 40),
         partial_payment: false,
@@ -459,6 +597,9 @@ Deno.serve(async (req: Request) => {
           freshmarket_order_id: orderData.id,
           freshmarket_order_number: orderData.order_number,
           user_id: user.id,
+          payment_method: paymentMethod,
+          wallet_amount: String(walletAmount),
+          gateway_amount: String(gatewayAmount),
         },
       }),
     });
@@ -467,7 +608,7 @@ Deno.serve(async (req: Request) => {
       const rzErrorText = await rzResponse.text();
       console.error("Razorpay order creation failed:", rzResponse.status, rzErrorText);
 
-      // Phase 6 Compensation: Release inventory reservations and cancel pending order
+      // Phase 6 Compensation: Release inventory reservations AND wallet reservation, cancel pending order
       await adminClient.rpc("rpc_fail_razorpay_initialization_atomic", {
         p_order_id: orderData.id,
         p_reason: `Razorpay Orders API rejected initialization: ${rzResponse.status}`,
@@ -512,7 +653,12 @@ Deno.serve(async (req: Request) => {
         payment_id: orderData.payment_id,
         razorpay_order_id: rzOrder.id,
         razorpay_key_id: razorpayKeyId,
-        amount_paise: orderData.amount_paise,
+        amount_paise: amountToChargePaise,
+        total_order_amount: orderData.amount_paise / 100,
+        wallet_amount: walletAmount,
+        gateway_amount: gatewayAmount,
+        payment_method: paymentMethod,
+        is_wallet_only: false,
         currency: "INR",
         prefill: {
           name: recipientName,

@@ -120,6 +120,9 @@ class CustomerOrder {
     required this.status,
     required this.paymentMethod,
     this.paymentStatus = 'PENDING',
+    this.walletAmountUsed = 0.0,
+    this.gatewayAmount = 0.0,
+    this.refundStatus,
     required this.deliveryAddress,
     required this.deliverySlot,
     required this.createdAt,
@@ -139,6 +142,9 @@ class CustomerOrder {
   final OrderStatus status;
   final String paymentMethod;
   final String paymentStatus;
+  final double walletAmountUsed;
+  final double gatewayAmount;
+  final String? refundStatus;
   final String deliveryAddress;
   final String deliverySlot;
   final DateTime createdAt;
@@ -207,6 +213,16 @@ class CustomerOrder {
       slotStr = snap['name'] as String? ?? slotStr;
     }
 
+    // Refund status from relation or field
+    String? refundStat = json['refund_status'] as String?;
+    if (refundStat == null &&
+        json['refunds'] != null &&
+        json['refunds'] is List &&
+        (json['refunds'] as List).isNotEmpty) {
+      final r = (json['refunds'] as List).first as Map<String, dynamic>;
+      refundStat = r['status'] as String?;
+    }
+
     return CustomerOrder(
       id: json['id'] as String,
       orderNumber: json['order_number'] as String? ?? 'FM-UNKNOWN',
@@ -221,6 +237,10 @@ class CustomerOrder {
       status: parsedStatus,
       paymentMethod: (json['payment_method'] as String? ?? 'COD').toUpperCase(),
       paymentStatus: payStatus,
+      walletAmountUsed:
+          (json['wallet_amount_used'] as num?)?.toDouble() ?? 0.0,
+      gatewayAmount: (json['gateway_amount'] as num?)?.toDouble() ?? 0.0,
+      refundStatus: refundStat,
       deliveryAddress: addressStr,
       deliverySlot: slotStr,
       createdAt: DateTime.parse(json['created_at'] as String),

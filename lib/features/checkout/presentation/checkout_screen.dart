@@ -27,6 +27,7 @@ class CheckoutScreen extends ConsumerStatefulWidget {
 class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   String? _selectedSlotId;
   String _selectedPaymentMethod = 'cod';
+  bool _useWallet = false;
   final _couponController = TextEditingController();
   final _notesController = TextEditingController();
   String? _appliedCouponCode;
@@ -121,9 +122,71 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     }
   }
 
+  Future<void> _handlePayWallet({
+    required String addressId,
+    required String slotId,
+  }) async {
+    if (_isSubmitting) return;
+
+    setState(() {
+      _isSubmitting = true;
+      _currentCheckoutRequestId ??= generateUuidV4();
+    });
+
+    try {
+      final order = await ref
+          .read(checkoutRepositoryProvider)
+          .createWalletPaymentOrder(
+            checkoutRequestId: _currentCheckoutRequestId!,
+            addressId: addressId,
+            deliverySlotId: slotId,
+            couponCode: _appliedCouponCode,
+            customerNotes: _notesController.text.trim().isEmpty
+                ? null
+                : _notesController.text.trim(),
+          );
+
+      if (!mounted) return;
+
+      _currentCheckoutRequestId = null;
+      ref.read(cartProvider.notifier).clearCart();
+      ref.invalidate(customerOrdersProvider);
+
+      context.go('${AppRoutes.orderSuccessPrefix}/${order.id}');
+    } on CheckoutException catch (e) {
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+
+      if (e.code == 'OUT_OF_STOCK' || e.code == 'EMPTY_CART') {
+        ref.invalidate(cartProvider);
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } catch (err) {
+      if (!mounted) return;
+      setState(() => _isSubmitting = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Wallet payment failed: $err'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   Future<void> _handlePayOnline({
     required String addressId,
     required String slotId,
+    bool useWallet = false,
   }) async {
     if (_isSubmitting) return;
 
@@ -143,6 +206,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             customerNotes: _notesController.text.trim().isEmpty
                 ? null
                 : _notesController.text.trim(),
+            useWallet: useWallet,
           );
     } catch (e) {
       if (!mounted) return;
@@ -188,6 +252,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           addressId: selectedAddress?.id,
           deliverySlotId: _selectedSlotId,
           couponCode: _appliedCouponCode,
+          useWallet: _useWallet,
         ),
       ),
     );
@@ -512,112 +577,171 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       // Step 3: Payment Method
                       _buildSectionCard(
                         title: '3. Payment Method',
-                        content: RadioGroup<String>(
-                          groupValue: _selectedPaymentMethod,
-                          onChanged: (val) {
-                            if (val != null) {
-                              setState(() => _selectedPaymentMethod = val);
-                            }
-                          },
-                          child: Column(
-                            children: [
-                              // Cash on Delivery
-                              ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                dense: true,
-                                leading: const Radio<String>(
-                                  value: 'cod',
-                                  activeColor: AppColors.primary,
-                                ),
-                                title: const Row(
-                                  children: [
-                                    Icon(
-                                      Icons.payments_outlined,
-                                      size: 18,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      'Cash on Delivery (COD)',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                subtitle: const Text(
-                                  'Pay with cash or UPI QR code at your doorstep',
-                                  style: TextStyle(fontSize: 11),
-                                ),
-                                onTap: () => setState(
-                                  () => _selectedPaymentMethod = 'cod',
-                                ),
-                              ),
-                              const Divider(height: 1),
+                        content: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Wallet Toggle
+                            _buildWalletOption(quoteAsync),
+                            const SizedBox(height: AppDimensions.sm),
 
-                              // Online Payment (Razorpay)
-                              ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                dense: true,
-                                leading: const Radio<String>(
-                                  value: 'razorpay',
-                                  activeColor: AppColors.primary,
+                            if (_useWallet &&
+                                quoteAsync.value?.isWalletOnly == true)
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(AppDimensions.md),
+                                decoration: BoxDecoration(
+                                  color: AppColors.successContainer,
+                                  borderRadius: AppDimensions.roundedSm,
                                 ),
-                                title: Wrap(
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  spacing: 6,
-                                  runSpacing: 4,
+                                child: Row(
                                   children: [
-                                    const Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.payment_rounded,
-                                          size: 18,
-                                          color: AppColors.primary,
-                                        ),
-                                        SizedBox(width: 8),
-                                        Text(
-                                          'Online Payment (Razorpay)',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 13,
-                                            color: AppColors.textPrimary,
-                                          ),
-                                        ),
-                                      ],
+                                    const Icon(
+                                      Icons.check_circle_rounded,
+                                      color: AppColors.success,
+                                      size: 18,
                                     ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 1,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.primaryContainer,
-                                        borderRadius: AppDimensions.roundedPill,
-                                      ),
-                                      child: const Text(
-                                        'UPI / Card / Netbanking',
-                                        style: TextStyle(
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.bold,
-                                          color: AppColors.primaryDark,
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        '100% of this order is covered by your wallet balance (${AppStrings.currencySymbol}${quoteAsync.value?.grandTotal.toStringAsFixed(0) ?? ''}). No gateway payment required!',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.success,
                                         ),
                                       ),
                                     ),
                                   ],
                                 ),
-                                subtitle: const Text(
-                                  'Pay securely with UPI, Credit/Debit Cards, or Netbanking',
-                                  style: TextStyle(fontSize: 11),
-                                ),
-                                onTap: () => setState(
-                                  () => _selectedPaymentMethod = 'razorpay',
+                              )
+                            else ...[
+                              RadioGroup<String>(
+                                groupValue: _selectedPaymentMethod,
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setState(
+                                      () => _selectedPaymentMethod = val,
+                                    );
+                                  }
+                                },
+                                child: Column(
+                                  children: [
+                                    // Cash on Delivery
+                                    Opacity(
+                                      opacity: _useWallet ? 0.4 : 1.0,
+                                      child: ListTile(
+                                        contentPadding: EdgeInsets.zero,
+                                        dense: true,
+                                        leading: const Radio<String>(
+                                          value: 'cod',
+                                          activeColor: AppColors.primary,
+                                        ),
+                                        title: const Row(
+                                          children: [
+                                            Icon(
+                                              Icons.payments_outlined,
+                                              size: 18,
+                                              color: AppColors.textSecondary,
+                                            ),
+                                            SizedBox(width: 8),
+                                            Text(
+                                              'Cash on Delivery (COD)',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        subtitle: Text(
+                                          _useWallet
+                                              ? 'Mixed payments require online payment'
+                                              : 'Pay with cash or UPI QR code at your doorstep',
+                                          style: const TextStyle(fontSize: 11),
+                                        ),
+                                        onTap: _useWallet
+                                            ? null
+                                            : () => setState(
+                                                  () =>
+                                                      _selectedPaymentMethod =
+                                                          'cod',
+                                                ),
+                                      ),
+                                    ),
+                                    const Divider(height: 1),
+
+                                    // Online Payment (Razorpay)
+                                    ListTile(
+                                      contentPadding: EdgeInsets.zero,
+                                      dense: true,
+                                      leading: const Radio<String>(
+                                        value: 'razorpay',
+                                        activeColor: AppColors.primary,
+                                      ),
+                                      title: Wrap(
+                                        crossAxisAlignment:
+                                            WrapCrossAlignment.center,
+                                        spacing: 6,
+                                        runSpacing: 4,
+                                        children: [
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(
+                                                Icons.payment_rounded,
+                                                size: 18,
+                                                color: AppColors.primary,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                _useWallet
+                                                    ? 'Online Payment (Mixed Razorpay)'
+                                                    : 'Online Payment (Razorpay)',
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 13,
+                                                  color: AppColors.textPrimary,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 1,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.primaryContainer,
+                                              borderRadius:
+                                                  AppDimensions.roundedPill,
+                                            ),
+                                            child: const Text(
+                                              'UPI / Card / Netbanking',
+                                              style: TextStyle(
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.bold,
+                                                color: AppColors.primaryDark,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      subtitle: Text(
+                                        _useWallet
+                                            ? 'Pay remaining balance of ₹${quoteAsync.value?.gatewayPayable.toStringAsFixed(0) ?? '0'} securely online'
+                                            : 'Pay securely with UPI, Credit/Debit Cards, or Netbanking',
+                                        style: const TextStyle(fontSize: 11),
+                                      ),
+                                      onTap: () => setState(
+                                        () =>
+                                            _selectedPaymentMethod = 'razorpay',
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
-                          ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: AppDimensions.md),
@@ -921,14 +1045,122 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   : '${AppStrings.currencySymbol}${quote.deliveryFee.toStringAsFixed(0)}',
               color: quote.deliveryFee == 0 ? AppColors.success : null,
             ),
+            if (_useWallet && quote.walletAmountApplied > 0)
+              _buildPriceRow(
+                'FreshMarket Wallet Applied',
+                '-${AppStrings.currencySymbol}${quote.walletAmountApplied.toStringAsFixed(0)}',
+                color: AppColors.primary,
+              ),
             const Divider(height: 16),
             _buildPriceRow(
-              'Grand Total (Payable COD)',
-              '${AppStrings.currencySymbol}${quote.grandTotal.toStringAsFixed(0)}',
+              _useWallet && quote.isWalletOnly
+                  ? 'Amount Payable (Wallet Only)'
+                  : (_useWallet
+                      ? 'Net Online Payable'
+                      : (_selectedPaymentMethod == 'cod'
+                          ? 'Grand Total (Payable COD)'
+                          : 'Grand Total (Online)')),
+              '${AppStrings.currencySymbol}${(_useWallet ? quote.gatewayPayable : quote.grandTotal).toStringAsFixed(0)}',
               isBold: true,
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildWalletOption(AsyncValue<CheckoutQuote> quoteAsync) {
+    final quote = quoteAsync.value;
+    final walletBal = quote?.walletBalance ?? 0.0;
+    final hasBalance = walletBal > 0;
+
+    return Container(
+      padding: const EdgeInsets.all(AppDimensions.md),
+      decoration: BoxDecoration(
+        color: _useWallet
+            ? AppColors.primaryContainer.withValues(alpha: 0.35)
+            : AppColors.surface,
+        borderRadius: AppDimensions.roundedSm,
+        border: Border.all(
+          color: _useWallet ? AppColors.primary : AppColors.surfaceBorder,
+          width: _useWallet ? 1.5 : 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.primaryContainer,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.account_balance_wallet_rounded,
+              color: AppColors.primary,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Text(
+                      'FreshMarket Wallet',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '(${AppStrings.currencySymbol}${walletBal.toStringAsFixed(0)})',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  !hasBalance
+                      ? 'No wallet balance available'
+                      : (_useWallet
+                          ? (quote?.isWalletOnly == true
+                              ? 'Covers entire bill amount'
+                              : '₹${quote?.walletAmountApplied.toStringAsFixed(0)} will be deducted')
+                          : 'Use wallet balance for this order'),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: _useWallet
+                        ? AppColors.primaryDark
+                        : AppColors.textSecondary,
+                    fontWeight:
+                        _useWallet ? FontWeight.w600 : FontWeight.normal,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: _useWallet,
+            activeTrackColor: AppColors.primary,
+            onChanged: hasBalance
+                ? (val) {
+                    setState(() {
+                      _useWallet = val;
+                      if (val && quote?.isWalletOnly != true) {
+                        _selectedPaymentMethod = 'razorpay';
+                      }
+                    });
+                  }
+                : null,
+          ),
+        ],
       ),
     );
   }
@@ -940,9 +1172,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     required bool isServiceable,
     required String? slotId,
   }) {
-    final grandTotalDisplay =
-        quoteAsync.value?.grandTotal ?? cartState.totalPayable;
-    final isStockValid = quoteAsync.value?.stockValid ?? true;
+    final quote = quoteAsync.value;
+    final grandTotalDisplay = quote?.grandTotal ?? cartState.totalPayable;
+    final isStockValid = quote?.stockValid ?? true;
     final canPlaceOrder =
         cartState.items.isNotEmpty &&
         selectedAddress != null &&
@@ -951,12 +1183,71 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         isStockValid &&
         !_isSubmitting;
 
-    final isOnline = _selectedPaymentMethod == 'razorpay';
-    final buttonLabel = _isSubmitting
-        ? (isOnline ? 'Connecting Gateway...' : 'Placing Order...')
-        : (isOnline
-              ? 'Pay ${AppStrings.currencySymbol}${grandTotalDisplay.toStringAsFixed(0)}'
-              : 'Place COD Order');
+    final isWalletOnly = _useWallet && (quote?.isWalletOnly ?? false);
+    final isMixed = _useWallet && !isWalletOnly;
+    final isOnline = _selectedPaymentMethod == 'razorpay' || isMixed;
+
+    String subtitle;
+    String displayAmount;
+    String buttonLabel;
+    IconData buttonIcon;
+    VoidCallback? buttonAction;
+
+    if (_isSubmitting) {
+      subtitle = 'Processing...';
+      displayAmount =
+          '${AppStrings.currencySymbol}${grandTotalDisplay.toStringAsFixed(0)}';
+      buttonLabel = isWalletOnly
+          ? 'Debiting Wallet...'
+          : (isOnline ? 'Connecting Gateway...' : 'Placing Order...');
+      buttonIcon = Icons.sync;
+      buttonAction = null;
+    } else if (isWalletOnly) {
+      subtitle = 'Covered by Wallet';
+      displayAmount =
+          '${AppStrings.currencySymbol}${grandTotalDisplay.toStringAsFixed(0)}';
+      buttonLabel = 'Pay from Wallet';
+      buttonIcon = Icons.account_balance_wallet_rounded;
+      buttonAction = () => _handlePayWallet(
+            addressId: selectedAddress.id,
+            slotId: slotId!,
+          );
+    } else if (isMixed) {
+      final gatewayAmt = quote?.gatewayPayable ?? grandTotalDisplay;
+      subtitle =
+          '₹${quote?.walletAmountApplied.toStringAsFixed(0) ?? '0'} from Wallet';
+      displayAmount =
+          '${AppStrings.currencySymbol}${gatewayAmt.toStringAsFixed(0)}';
+      buttonLabel = 'Pay ₹${gatewayAmt.toStringAsFixed(0)} Online';
+      buttonIcon = Icons.payment_rounded;
+      buttonAction = () => _handlePayOnline(
+            addressId: selectedAddress.id,
+            slotId: slotId!,
+            useWallet: true,
+          );
+    } else if (isOnline) {
+      subtitle = 'Online Amount';
+      displayAmount =
+          '${AppStrings.currencySymbol}${grandTotalDisplay.toStringAsFixed(0)}';
+      buttonLabel =
+          'Pay ${AppStrings.currencySymbol}${grandTotalDisplay.toStringAsFixed(0)}';
+      buttonIcon = Icons.payment_rounded;
+      buttonAction = () => _handlePayOnline(
+            addressId: selectedAddress.id,
+            slotId: slotId!,
+            useWallet: false,
+          );
+    } else {
+      subtitle = 'Payable on Delivery';
+      displayAmount =
+          '${AppStrings.currencySymbol}${grandTotalDisplay.toStringAsFixed(0)}';
+      buttonLabel = 'Place COD Order';
+      buttonIcon = Icons.check_circle_outline_rounded;
+      buttonAction = () => _handlePlaceOrder(
+            addressId: selectedAddress.id,
+            slotId: slotId!,
+          );
+    }
 
     return Container(
       padding: const EdgeInsets.all(AppDimensions.lg),
@@ -976,14 +1267,14 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  isOnline ? 'Online Amount' : 'Payable on Delivery',
+                  subtitle,
                   style: const TextStyle(
                     fontSize: 11,
                     color: AppColors.textSecondary,
                   ),
                 ),
                 Text(
-                  '${AppStrings.currencySymbol}${grandTotalDisplay.toStringAsFixed(0)}',
+                  displayAmount,
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
@@ -996,21 +1287,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             Expanded(
               child: AppButton(
                 label: buttonLabel,
-                icon: isOnline
-                    ? Icons.payment_rounded
-                    : Icons.check_circle_outline_rounded,
+                icon: buttonIcon,
                 isLoading: _isSubmitting,
-                onPressed: canPlaceOrder
-                    ? () => isOnline
-                          ? _handlePayOnline(
-                              addressId: selectedAddress.id,
-                              slotId: slotId,
-                            )
-                          : _handlePlaceOrder(
-                              addressId: selectedAddress.id,
-                              slotId: slotId,
-                            )
-                    : null,
+                onPressed: canPlaceOrder ? buttonAction : null,
               ),
             ),
           ],

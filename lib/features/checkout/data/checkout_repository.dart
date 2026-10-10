@@ -32,9 +32,18 @@ abstract interface class ICheckoutRepository {
     String? addressId,
     String? deliverySlotId,
     String? couponCode,
+    bool? useWallet,
   });
 
   Future<CustomerOrder> createCodOrder({
+    required String checkoutRequestId,
+    required String addressId,
+    required String deliverySlotId,
+    String? couponCode,
+    String? customerNotes,
+  });
+
+  Future<CustomerOrder> createWalletPaymentOrder({
     required String checkoutRequestId,
     required String addressId,
     required String deliverySlotId,
@@ -59,6 +68,7 @@ class SupabaseCheckoutRepository implements ICheckoutRepository {
     String? addressId,
     String? deliverySlotId,
     String? couponCode,
+    bool? useWallet,
   }) async {
     try {
       final response = await _supabase.functions.invoke(
@@ -68,6 +78,7 @@ class SupabaseCheckoutRepository implements ICheckoutRepository {
           'delivery_slot_id': ?deliverySlotId,
           if (couponCode != null && couponCode.isNotEmpty)
             'coupon_code': couponCode,
+          'use_wallet': ?useWallet,
         },
       );
 
@@ -177,6 +188,73 @@ class SupabaseCheckoutRepository implements ICheckoutRepository {
   }
 
   @override
+  Future<CustomerOrder> createWalletPaymentOrder({
+    required String checkoutRequestId,
+    required String addressId,
+    required String deliverySlotId,
+    String? couponCode,
+    String? customerNotes,
+  }) async {
+    try {
+      final response = await _supabase.functions.invoke(
+        'create-wallet-payment-order',
+        body: {
+          'checkout_request_id': checkoutRequestId,
+          'address_id': addressId,
+          'delivery_slot_id': deliverySlotId,
+          if (couponCode != null && couponCode.isNotEmpty)
+            'coupon_code': couponCode,
+          if (customerNotes != null && customerNotes.isNotEmpty)
+            'customer_notes': customerNotes,
+        },
+      );
+
+      final data = response.data;
+      if (data is Map<String, dynamic>) {
+        if (data['success'] == false) {
+          throw CheckoutException(
+            code: data['error_code'] as String? ?? 'WALLET_PAYMENT_FAILED',
+            message: data['message'] as String? ?? 'Failed to complete wallet payment.',
+          );
+        }
+
+        final orderId = data['id'] as String?;
+        if (orderId != null) {
+          final fullOrder = await ordersRepository.getOrderById(orderId);
+          if (fullOrder != null) {
+            return fullOrder;
+          }
+        }
+        return CustomerOrder.fromJson(data);
+      }
+
+      throw const CheckoutException(
+        code: 'WALLET_PAYMENT_FAILED',
+        message: 'Invalid response from wallet payment service.',
+      );
+    } on FunctionException catch (e) {
+      final details = e.details;
+      if (details is Map<String, dynamic>) {
+        throw CheckoutException(
+          code: details['error_code'] as String? ?? 'WALLET_PAYMENT_FAILED',
+          message: details['message'] as String? ?? e.toString(),
+        );
+      }
+      throw CheckoutException(
+        code: 'WALLET_PAYMENT_FAILED',
+        message: details?.toString() ?? e.toString(),
+      );
+    } catch (e) {
+      if (e is CheckoutException) rethrow;
+      throw const CheckoutException(
+        code: 'NETWORK_ERROR',
+        message:
+            'Wallet payment failed. Please check your connection and retry.',
+      );
+    }
+  }
+
+  @override
   Future<void> cancelOrder({required String orderId, String? reason}) async {
     try {
       final response = await _supabase.functions.invoke(
@@ -231,11 +309,13 @@ class CheckoutQuoteParams {
     this.addressId,
     this.deliverySlotId,
     this.couponCode,
+    this.useWallet = false,
   });
 
   final String? addressId;
   final String? deliverySlotId;
   final String? couponCode;
+  final bool useWallet;
 
   @override
   bool operator ==(Object other) =>
@@ -244,11 +324,15 @@ class CheckoutQuoteParams {
           runtimeType == other.runtimeType &&
           addressId == other.addressId &&
           deliverySlotId == other.deliverySlotId &&
-          couponCode == other.couponCode;
+          couponCode == other.couponCode &&
+          useWallet == other.useWallet;
 
   @override
   int get hashCode =>
-      addressId.hashCode ^ deliverySlotId.hashCode ^ couponCode.hashCode;
+      addressId.hashCode ^
+      deliverySlotId.hashCode ^
+      couponCode.hashCode ^
+      useWallet.hashCode;
 }
 
 final checkoutQuoteProvider =
@@ -261,5 +345,6 @@ final checkoutQuoteProvider =
         addressId: params.addressId,
         deliverySlotId: params.deliverySlotId,
         couponCode: params.couponCode,
+        useWallet: params.useWallet,
       );
     });
