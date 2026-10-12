@@ -16,7 +16,7 @@ class WalletScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final balanceAsync = ref.watch(walletBalanceProvider);
+    final accountAsync = ref.watch(walletAccountProvider);
     final transactionsAsync = ref.watch(walletTransactionsProvider);
 
     return Scaffold(
@@ -24,10 +24,10 @@ class WalletScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('FreshMarket Wallet')),
       body: RefreshIndicator(
         onRefresh: () async {
-          ref.invalidate(walletBalanceProvider);
+          ref.invalidate(walletAccountProvider);
           ref.invalidate(walletTransactionsProvider);
           await Future.wait([
-            ref.read(walletBalanceProvider.future),
+            ref.read(walletAccountProvider.future),
             ref.read(walletTransactionsProvider.future),
           ]);
         },
@@ -98,7 +98,7 @@ class WalletScreen extends ConsumerWidget {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    balanceAsync.when(
+                    accountAsync.when(
                       loading: () => const Text(
                         '₹...',
                         style: TextStyle(
@@ -115,14 +115,54 @@ class WalletScreen extends ConsumerWidget {
                           fontWeight: FontWeight.w800,
                         ),
                       ),
-                      data: (balance) => Text(
-                        '${AppStrings.currencySymbol}${balance.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 32,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.5,
-                        ),
+                      data: (account) => Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${AppStrings.currencySymbol}${account.availableBalance.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 32,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                          if (account.reservedBalance > 0) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Colors.amber.withValues(alpha: 0.4),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.lock_clock_outlined,
+                                    size: 14,
+                                    color: Colors.amberAccent,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Reserved: ${AppStrings.currencySymbol}${account.reservedBalance.toStringAsFixed(2)}  •  Total: ${AppStrings.currencySymbol}${account.balance.toStringAsFixed(2)}',
+                                    style: const TextStyle(
+                                      color: Colors.amberAccent,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                     const SizedBox(height: 12),

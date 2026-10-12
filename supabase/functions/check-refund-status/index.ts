@@ -1,5 +1,5 @@
-import { createClient } from "jsr:@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { createServiceClient, createUserClient } from "../_shared/keys.ts";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -22,19 +22,12 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const anonKey =
-      Deno.env.get("SUPABASE_ANON_KEY") ??
-      Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ??
-      "";
-    const serviceRoleKey =
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
-      Deno.env.get("SUPABASE_SECRET_KEY") ??
-      "";
-    const razorpayKeyId = Deno.env.get("RAZORPAY_KEY_ID") ?? "";
-    const razorpayKeySecret = Deno.env.get("RAZORPAY_KEY_SECRET") ?? "";
-
-    if (!supabaseUrl || !serviceRoleKey) {
+    let userClient;
+    let adminClient;
+    try {
+      userClient = createUserClient(authHeader);
+      adminClient = createServiceClient();
+    } catch {
       return new Response(
         JSON.stringify({
           success: false,
@@ -48,11 +41,8 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 1. Authenticate user from incoming JWT
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-      auth: { persistSession: false },
-    });
+    const razorpayKeyId = Deno.env.get("RAZORPAY_KEY_ID") ?? "";
+    const razorpayKeySecret = Deno.env.get("RAZORPAY_KEY_SECRET") ?? "";
 
     const {
       data: { user },
@@ -106,12 +96,8 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const adminClient = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false },
-    });
-
     // 3. Find refund record
-    let query = adminClient
+    let query: any = adminClient
       .from("refunds")
       .select("*, refund_components(*), orders!inner(user_id, order_number)")
       .eq("orders.user_id", user.id);
@@ -142,7 +128,7 @@ Deno.serve(async (req: Request) => {
 
     // 4. Reconcile with Razorpay API if any gateway component is processing and has gateway_refund_id
     const razorpayComponent = refund.refund_components?.find(
-      (c: { method: string; status: string }) => c.method === "razorpay" && c.status === "processing"
+      (c: Record<string, any>) => c.method === "razorpay" && c.status === "processing"
     );
 
     if (

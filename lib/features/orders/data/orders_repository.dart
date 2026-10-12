@@ -40,7 +40,7 @@ class SupabaseOrdersRepository implements IOrdersRepository {
             ),
             order_status_history (*),
             payments (*),
-            refunds (*)
+            refunds (*, refund_components (*))
           ''')
           .eq('user_id', user.id)
           .order('created_at', ascending: false);
@@ -75,7 +75,7 @@ class SupabaseOrdersRepository implements IOrdersRepository {
             ),
             order_status_history (*),
             payments (*),
-            refunds (*)
+            refunds (*, refund_components (*))
           ''')
           .eq('id', orderId)
           .maybeSingle();

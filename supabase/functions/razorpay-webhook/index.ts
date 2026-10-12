@@ -1,4 +1,4 @@
-import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createServiceClient } from "../_shared/keys.ts";
 
 function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -121,15 +121,7 @@ Deno.serve(async (req: Request) => {
     // Build deduplication key for this event
     const eventKey = `${eventType}_${rzOrderId || 'no_order'}_${rzPaymentId || 'no_payment'}_${event.created_at || Date.now()}`;
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const serviceRoleKey =
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
-      Deno.env.get("SUPABASE_SECRET_KEY") ??
-      "";
-
-    const adminClient = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false },
-    });
+    const adminClient = createServiceClient();
 
     // Idempotency check: insert webhook event row
     const { error: insertError } = await adminClient

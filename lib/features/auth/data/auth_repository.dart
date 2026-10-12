@@ -33,8 +33,18 @@ class SupabaseAuthRepository implements IAuthRepository {
   SupabaseAuthRepository({
     required SupabaseClient supabaseClient,
     GoogleSignIn? googleSignIn,
+    String? serverClientId,
   }) : _supabase = supabaseClient,
-       _googleSignIn = googleSignIn ?? GoogleSignIn();
+       _googleSignIn =
+           googleSignIn ??
+           GoogleSignIn(
+             serverClientId:
+                 serverClientId ??
+                 (const String.fromEnvironment('GOOGLE_WEB_CLIENT_ID')
+                         .isNotEmpty
+                     ? const String.fromEnvironment('GOOGLE_WEB_CLIENT_ID')
+                     : null),
+           );
 
   final SupabaseClient _supabase;
   final GoogleSignIn _googleSignIn;

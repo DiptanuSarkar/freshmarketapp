@@ -51,7 +51,10 @@ abstract interface class ICheckoutRepository {
     String? customerNotes,
   });
 
-  Future<void> cancelOrder({required String orderId, String? reason});
+  Future<Map<String, dynamic>> cancelOrder({
+    required String orderId,
+    String? reason,
+  });
 }
 
 class SupabaseCheckoutRepository implements ICheckoutRepository {
@@ -214,7 +217,9 @@ class SupabaseCheckoutRepository implements ICheckoutRepository {
         if (data['success'] == false) {
           throw CheckoutException(
             code: data['error_code'] as String? ?? 'WALLET_PAYMENT_FAILED',
-            message: data['message'] as String? ?? 'Failed to complete wallet payment.',
+            message:
+                data['message'] as String? ??
+                'Failed to complete wallet payment.',
           );
         }
 
@@ -255,7 +260,10 @@ class SupabaseCheckoutRepository implements ICheckoutRepository {
   }
 
   @override
-  Future<void> cancelOrder({required String orderId, String? reason}) async {
+  Future<Map<String, dynamic>> cancelOrder({
+    required String orderId,
+    String? reason,
+  }) async {
     try {
       final response = await _supabase.functions.invoke(
         'cancel-order',
@@ -272,6 +280,7 @@ class SupabaseCheckoutRepository implements ICheckoutRepository {
           message: data['message'] as String? ?? 'Failed to cancel order.',
         );
       }
+      return data is Map<String, dynamic> ? data : {'success': true};
     } on FunctionException catch (e) {
       final details = e.details;
       if (details is Map<String, dynamic>) {

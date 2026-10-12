@@ -86,68 +86,8 @@ class OrderSuccessScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: AppDimensions.xl),
 
-                // COD Instructions Card
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(AppDimensions.md),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: AppDimensions.roundedMd,
-                    border: Border.all(color: AppColors.surfaceBorder),
-                    boxShadow: AppDimensions.cardShadow,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.payments_outlined,
-                            color: AppColors.primary,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Cash on Delivery (COD)',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          const Spacer(),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.warningContainer,
-                              borderRadius: AppDimensions.roundedPill,
-                            ),
-                            child: const Text(
-                              'Payment Pending',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.warning,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Please keep ${AppStrings.currencySymbol}${order.totalAmount.toStringAsFixed(0)} ready in cash or pay via UPI QR code to our delivery executive when your cuts arrive.',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                          height: 1.4,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                // Payment Instructions Card
+                _buildPaymentInfoCard(order),
                 const SizedBox(height: AppDimensions.md),
 
                 // Delivery Information Card
@@ -300,6 +240,109 @@ class OrderSuccessScreen extends ConsumerWidget {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildPaymentInfoCard(dynamic order) {
+    final method = (order.paymentMethod as String? ?? 'COD').toUpperCase();
+    final isWallet = method == 'WALLET';
+    final isMixed = method == 'MIXED';
+    final isOnline = method == 'RAZORPAY' || method == 'ONLINE';
+
+    String title;
+    IconData icon;
+    String badgeText;
+    Color badgeColor;
+    Color badgeBg;
+    String description;
+
+    if (isWallet) {
+      title = 'FreshMarket Wallet';
+      icon = Icons.account_balance_wallet_rounded;
+      badgeText = 'Paid / Confirmed';
+      badgeColor = AppColors.success;
+      badgeBg = AppColors.successContainer;
+      description =
+          '${AppStrings.currencySymbol}${order.totalAmount.toStringAsFixed(0)} was paid instantly from your FreshMarket Wallet. No cash or payment required at delivery.';
+    } else if (isMixed) {
+      title = 'Wallet + Online Payment';
+      icon = Icons.payment_rounded;
+      badgeText = 'Paid / Confirmed';
+      badgeColor = AppColors.success;
+      badgeBg = AppColors.successContainer;
+      description =
+          'Paid via ${AppStrings.currencySymbol}${order.walletAmountUsed.toStringAsFixed(0)} from Wallet and ${AppStrings.currencySymbol}${order.gatewayAmount.toStringAsFixed(0)} via Razorpay online payment.';
+    } else if (isOnline) {
+      title = 'Online Payment (Razorpay)';
+      icon = Icons.credit_card_rounded;
+      badgeText = 'Paid / Confirmed';
+      badgeColor = AppColors.success;
+      badgeBg = AppColors.successContainer;
+      description =
+          'Payment of ${AppStrings.currencySymbol}${order.totalAmount.toStringAsFixed(0)} verified and captured securely via Razorpay.';
+    } else {
+      title = 'Cash on Delivery (COD)';
+      icon = Icons.payments_outlined;
+      badgeText = 'Payment Pending';
+      badgeColor = AppColors.warning;
+      badgeBg = AppColors.warningContainer;
+      description =
+          'Please keep ${AppStrings.currencySymbol}${order.totalAmount.toStringAsFixed(0)} ready in cash or pay via UPI QR code to our delivery executive when your cuts arrive.';
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppDimensions.md),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppDimensions.roundedMd,
+        border: Border.all(color: AppColors.surfaceBorder),
+        boxShadow: AppDimensions.cardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: AppColors.primary, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: badgeBg,
+                  borderRadius: AppDimensions.roundedPill,
+                ),
+                child: Text(
+                  badgeText,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: badgeColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            description,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -31,7 +31,7 @@ try {
 } catch {}
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://fihpmrqtjtlykfxkyimp.supabase.co";
-const ANON_KEY = process.env.SUPABASE_ANON_KEY;
+const ANON_KEY = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
 
 function customLookup(hostname, options, callback) {
   if (typeof options === "function") {

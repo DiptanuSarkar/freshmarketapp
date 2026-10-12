@@ -126,12 +126,15 @@ class CategoriesScreen extends ConsumerWidget {
                   children: [
                     Row(
                       children: [
-                        Text(
-                          category.name,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.textPrimary,
+                        Flexible(
+                          child: Text(
+                            category.name,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textPrimary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         if (category.badge != null) ...[

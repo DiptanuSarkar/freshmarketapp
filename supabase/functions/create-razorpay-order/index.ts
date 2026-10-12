@@ -1,5 +1,5 @@
-import { createClient } from "jsr:@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { createServiceClient, createUserClient } from "../_shared/keys.ts";
 
 function mapErrorToResponse(errorMsg: string): { code: string; message: string } {
   if (errorMsg.includes("EMPTY_CART")) {
@@ -107,19 +107,12 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const anonKey =
-      Deno.env.get("SUPABASE_ANON_KEY") ??
-      Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ??
-      "";
-    const serviceRoleKey =
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
-      Deno.env.get("SUPABASE_SECRET_KEY") ??
-      "";
-    const razorpayKeyId = Deno.env.get("RAZORPAY_KEY_ID") ?? "";
-    const razorpayKeySecret = Deno.env.get("RAZORPAY_KEY_SECRET") ?? "";
-
-    if (!supabaseUrl || !serviceRoleKey) {
+    let userClient;
+    let adminClient;
+    try {
+      userClient = createUserClient(authHeader);
+      adminClient = createServiceClient();
+    } catch {
       return new Response(
         JSON.stringify({
           success: false,
@@ -132,6 +125,9 @@ Deno.serve(async (req: Request) => {
         }
       );
     }
+
+    const razorpayKeyId = Deno.env.get("RAZORPAY_KEY_ID") ?? "";
+    const razorpayKeySecret = Deno.env.get("RAZORPAY_KEY_SECRET") ?? "";
 
     if (!razorpayKeyId || !razorpayKeySecret) {
       return new Response(
@@ -146,12 +142,6 @@ Deno.serve(async (req: Request) => {
         }
       );
     }
-
-    // 1. Authenticate user from incoming JWT
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-      auth: { persistSession: false },
-    });
 
     const {
       data: { user },
@@ -198,10 +188,6 @@ Deno.serve(async (req: Request) => {
         }
       );
     }
-
-    const adminClient = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false },
-    });
 
     // Handle Payment Retry Flow (for existing payment_pending order)
     if (body.order_id) {

@@ -662,10 +662,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                                         onTap: _useWallet
                                             ? null
                                             : () => setState(
-                                                  () =>
-                                                      _selectedPaymentMethod =
-                                                          'cod',
-                                                ),
+                                                () => _selectedPaymentMethod =
+                                                    'cod',
+                                              ),
                                       ),
                                     ),
                                     const Divider(height: 1),
@@ -1056,10 +1055,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               _useWallet && quote.isWalletOnly
                   ? 'Amount Payable (Wallet Only)'
                   : (_useWallet
-                      ? 'Net Online Payable'
-                      : (_selectedPaymentMethod == 'cod'
-                          ? 'Grand Total (Payable COD)'
-                          : 'Grand Total (Online)')),
+                        ? 'Net Online Payable'
+                        : (_selectedPaymentMethod == 'cod'
+                              ? 'Grand Total (Payable COD)'
+                              : 'Grand Total (Online)')),
               '${AppStrings.currencySymbol}${(_useWallet ? quote.gatewayPayable : quote.grandTotal).toStringAsFixed(0)}',
               isBold: true,
             ),
@@ -1130,17 +1129,18 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   !hasBalance
                       ? 'No wallet balance available'
                       : (_useWallet
-                          ? (quote?.isWalletOnly == true
-                              ? 'Covers entire bill amount'
-                              : '₹${quote?.walletAmountApplied.toStringAsFixed(0)} will be deducted')
-                          : 'Use wallet balance for this order'),
+                            ? (quote?.isWalletOnly == true
+                                  ? 'Covers entire bill amount'
+                                  : '₹${quote?.walletAmountApplied.toStringAsFixed(0)} will be deducted')
+                            : 'Use wallet balance for this order'),
                   style: TextStyle(
                     fontSize: 11,
                     color: _useWallet
                         ? AppColors.primaryDark
                         : AppColors.textSecondary,
-                    fontWeight:
-                        _useWallet ? FontWeight.w600 : FontWeight.normal,
+                    fontWeight: _useWallet
+                        ? FontWeight.w600
+                        : FontWeight.normal,
                   ),
                 ),
               ],
@@ -1208,10 +1208,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           '${AppStrings.currencySymbol}${grandTotalDisplay.toStringAsFixed(0)}';
       buttonLabel = 'Pay from Wallet';
       buttonIcon = Icons.account_balance_wallet_rounded;
-      buttonAction = () => _handlePayWallet(
-            addressId: selectedAddress.id,
-            slotId: slotId!,
-          );
+      buttonAction = () =>
+          _handlePayWallet(addressId: selectedAddress.id, slotId: slotId!);
     } else if (isMixed) {
       final gatewayAmt = quote?.gatewayPayable ?? grandTotalDisplay;
       subtitle =
@@ -1221,10 +1219,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       buttonLabel = 'Pay ₹${gatewayAmt.toStringAsFixed(0)} Online';
       buttonIcon = Icons.payment_rounded;
       buttonAction = () => _handlePayOnline(
-            addressId: selectedAddress.id,
-            slotId: slotId!,
-            useWallet: true,
-          );
+        addressId: selectedAddress.id,
+        slotId: slotId!,
+        useWallet: true,
+      );
     } else if (isOnline) {
       subtitle = 'Online Amount';
       displayAmount =
@@ -1233,20 +1231,18 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           'Pay ${AppStrings.currencySymbol}${grandTotalDisplay.toStringAsFixed(0)}';
       buttonIcon = Icons.payment_rounded;
       buttonAction = () => _handlePayOnline(
-            addressId: selectedAddress.id,
-            slotId: slotId!,
-            useWallet: false,
-          );
+        addressId: selectedAddress.id,
+        slotId: slotId!,
+        useWallet: false,
+      );
     } else {
       subtitle = 'Payable on Delivery';
       displayAmount =
           '${AppStrings.currencySymbol}${grandTotalDisplay.toStringAsFixed(0)}';
       buttonLabel = 'Place COD Order';
       buttonIcon = Icons.check_circle_outline_rounded;
-      buttonAction = () => _handlePlaceOrder(
-            addressId: selectedAddress.id,
-            slotId: slotId!,
-          );
+      buttonAction = () =>
+          _handlePlaceOrder(addressId: selectedAddress.id, slotId: slotId!);
     }
 
     return Container(

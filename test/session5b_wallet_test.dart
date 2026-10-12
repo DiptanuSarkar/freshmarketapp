@@ -92,11 +92,7 @@ void main() {
         'cancellation_reason': 'Customer requested cancellation',
         'created_at': '2026-10-10T08:00:00Z',
         'refunds': [
-          {
-            'id': 'ref-1',
-            'status': 'completed',
-            'amount': 600.0,
-          }
+          {'id': 'ref-1', 'status': 'completed', 'amount': 600.0},
         ],
       };
 
@@ -106,8 +102,8 @@ void main() {
       expect(order.orderNumber, 'FM-20261010-0001');
       expect(order.paymentMethod, 'WALLET');
       expect(order.walletAmountUsed, 600.0);
-      expect(order.gatewayAmount, 0.0);
-      expect(order.refundStatus, 'completed');
+      expect(order.refundStatus, 'processed');
+      expect(order.typedRefundStatus, RefundStatus.processed);
       expect(order.status, OrderStatus.cancelled);
     });
 

@@ -29,8 +29,8 @@ try {
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://fihpmrqtjtlykfxkyimp.supabase.co";
 const ANON_KEY =
-  process.env.SUPABASE_ANON_KEY ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpaHBtcnF0anRseWtmeGt5aW1wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExMjg4MjgsImV4cCI6MjEwNjcwNDgyOH0.J_9CEjB8vSoE83CiTNgu82OAKxs7Bp16sNdmxzaFAks";
+  process.env.SUPABASE_PUBLISHABLE_KEY ||
+  process.env.SUPABASE_ANON_KEY;
 
 function customLookup(hostname, options, callback) {
   if (typeof options === "function") {

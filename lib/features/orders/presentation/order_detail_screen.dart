@@ -11,7 +11,9 @@ import '../../../core/widgets/feedback/app_loading_indicator.dart';
 import '../../../shared/models/order.dart';
 import '../../checkout/data/checkout_repository.dart';
 import '../../payment/presentation/providers/razorpay_controller.dart';
+import '../../wallet/data/wallet_repository.dart';
 import '../data/orders_repository.dart';
+import '../data/refund_repository.dart';
 import 'widgets/order_status_timeline.dart';
 
 class OrderDetailScreen extends ConsumerWidget {
@@ -107,7 +109,7 @@ class OrderDetailScreen extends ConsumerWidget {
                                   ),
                                 ),
                               ],
-                              if (order.refundStatus != null) ...[
+                              if (order.typedRefundStatus != null) ...[
                                 const SizedBox(height: 8),
                                 Container(
                                   padding: const EdgeInsets.symmetric(
@@ -115,8 +117,10 @@ class OrderDetailScreen extends ConsumerWidget {
                                     vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: order.refundStatus == 'completed'
+                                    color: order.typedRefundStatus!.isProcessed
                                         ? AppColors.successContainer
+                                        : order.typedRefundStatus!.isFailed
+                                        ? AppColors.errorContainer
                                         : AppColors.primaryContainer,
                                     borderRadius: BorderRadius.circular(4),
                                   ),
@@ -124,24 +128,35 @@ class OrderDetailScreen extends ConsumerWidget {
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Icon(
-                                        order.refundStatus == 'completed'
+                                        order.typedRefundStatus!.isProcessed
                                             ? Icons.check_circle_rounded
+                                            : order.typedRefundStatus!.isFailed
+                                            ? Icons.error_outline_rounded
                                             : Icons.sync,
                                         size: 14,
-                                        color: order.refundStatus == 'completed'
+                                        color:
+                                            order.typedRefundStatus!.isProcessed
                                             ? AppColors.success
+                                            : order.typedRefundStatus!.isFailed
+                                            ? AppColors.error
                                             : AppColors.primary,
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
-                                        'Refund ${order.refundStatus!.toUpperCase()}',
+                                        'Refund ${order.typedRefundStatus!.label.toUpperCase()}',
                                         style: TextStyle(
                                           fontSize: 11,
                                           fontWeight: FontWeight.bold,
                                           color:
-                                              order.refundStatus == 'completed'
-                                                  ? AppColors.success
-                                                  : AppColors.primaryDark,
+                                              order
+                                                  .typedRefundStatus!
+                                                  .isProcessed
+                                              ? AppColors.success
+                                              : order
+                                                    .typedRefundStatus!
+                                                    .isFailed
+                                              ? AppColors.error
+                                              : AppColors.primaryDark,
                                         ),
                                       ),
                                     ],
@@ -480,11 +495,11 @@ class OrderDetailScreen extends ConsumerWidget {
                         order.paymentMethod == 'WALLET'
                             ? 'FreshMarket Wallet'
                             : (order.paymentMethod == 'MIXED'
-                                ? 'Wallet + Online (Razorpay)'
-                                : (order.paymentMethod == 'RAZORPAY' ||
-                                        order.paymentMethod == 'ONLINE'
-                                    ? 'Online Payment (Razorpay)'
-                                    : order.paymentMethod)),
+                                  ? 'Wallet + Online (Razorpay)'
+                                  : (order.paymentMethod == 'RAZORPAY' ||
+                                            order.paymentMethod == 'ONLINE'
+                                        ? 'Online Payment (Razorpay)'
+                                        : order.paymentMethod)),
                       ),
                       _buildPriceRow(
                         'Payment Status',
@@ -507,15 +522,30 @@ class OrderDetailScreen extends ConsumerWidget {
                           'Online Paid',
                           '${AppStrings.currencySymbol}${order.gatewayAmount.toStringAsFixed(0)}',
                         ),
-                      if (order.refundStatus != null)
+                      if (order.refund != null &&
+                          order.refund!.components.isNotEmpty) ...[
+                        for (final comp in order.refund!.components)
+                          _buildPriceRow(
+                            comp.isWallet ? 'Wallet Refund' : 'Online Refund',
+                            '${AppStrings.currencySymbol}${comp.amount.toStringAsFixed(2)} (${comp.status.label})',
+                            color: comp.status.isProcessed
+                                ? AppColors.success
+                                : comp.status.isFailed
+                                ? AppColors.error
+                                : AppColors.primary,
+                          ),
+                      ] else if (order.typedRefundStatus != null) ...[
                         _buildPriceRow(
-                          'Refund Lifecycle',
-                          order.refundStatus!.toUpperCase(),
-                          color: order.refundStatus == 'completed'
+                          'Refund Status',
+                          order.typedRefundStatus!.label,
+                          color: order.typedRefundStatus!.isProcessed
                               ? AppColors.success
+                              : order.typedRefundStatus!.isFailed
+                              ? AppColors.error
                               : AppColors.primary,
                           isBold: true,
                         ),
+                      ],
                     ],
                   ),
                 ),
@@ -585,6 +615,69 @@ class OrderDetailScreen extends ConsumerWidget {
                       icon: const Icon(Icons.sync_rounded, size: 18),
                       label: const Text(
                         'Check Payment Status',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+
+                // Action: Check Refund Status for refunds or cancelled paid orders
+                if (order.status == OrderStatus.cancelled &&
+                    (order.typedRefundStatus != null ||
+                        order.gatewayAmount > 0)) ...[
+                  const SizedBox(height: AppDimensions.md),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        side: const BorderSide(color: AppColors.primary),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: AppDimensions.roundedMd,
+                        ),
+                      ),
+                      onPressed: () async {
+                        try {
+                          final refund = await ref
+                              .read(refundRepositoryProvider)
+                              .checkRefundStatus(order.id);
+                          ref.invalidate(orderDetailProvider(order.id));
+                          ref.invalidate(customerOrdersProvider);
+                          ref.invalidate(walletAccountProvider);
+                          ref.invalidate(walletTransactionsProvider);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  refund != null
+                                      ? 'Refund Status: ${refund.status.label}'
+                                      : 'Refund status checked and up to date.',
+                                ),
+                                backgroundColor:
+                                    refund?.status.isProcessed == true
+                                    ? AppColors.success
+                                    : AppColors.primary,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Refund check: $e'),
+                                backgroundColor: AppColors.error,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                      icon: const Icon(Icons.refresh_rounded, size: 18),
+                      label: const Text(
+                        'Check Refund Status',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
@@ -706,13 +799,91 @@ class OrderDetailScreen extends ConsumerWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Are you sure you want to cancel this order? Any reserved inventory will be immediately released.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textSecondary,
+                    if (order.paymentStatus.toUpperCase() != 'COMPLETED') ...[
+                      const Text(
+                        'Are you sure you want to cancel this order? Any reserved inventory will be immediately released.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                        ),
                       ),
-                    ),
+                    ] else ...[
+                      Container(
+                        padding: const EdgeInsets.all(AppDimensions.md),
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryContainer.withValues(
+                            alpha: 0.4,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: AppColors.primary.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(
+                                  Icons.info_outline_rounded,
+                                  size: 16,
+                                  color: AppColors.primary,
+                                ),
+                                SizedBox(width: 6),
+                                Text(
+                                  'Refund Information',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primaryDark,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            if (order.walletAmountUsed > 0 &&
+                                order.gatewayAmount > 0) ...[
+                              Text(
+                                'Wallet refund: ${AppStrings.currencySymbol}${order.walletAmountUsed.toStringAsFixed(2)}\nRazorpay/original-method refund: ${AppStrings.currencySymbol}${order.gatewayAmount.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ] else if (order.walletAmountUsed > 0) ...[
+                              Text(
+                                'Expected wallet refund: ${AppStrings.currencySymbol}${order.walletAmountUsed.toStringAsFixed(2)} (instant credit to FreshMarket Wallet)',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ] else if (order.gatewayAmount > 0) ...[
+                              Text(
+                                'Expected gateway refund: ${AppStrings.currencySymbol}${order.gatewayAmount.toStringAsFixed(2)} to original payment method',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ] else ...[
+                              Text(
+                                'Expected refund: ${AppStrings.currencySymbol}${order.totalAmount.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     const Text(
                       'Please select a reason:',
@@ -802,7 +973,7 @@ class OrderDetailScreen extends ConsumerWidget {
                                 ? noteController.text.trim()
                                 : selectedReason;
 
-                            await ref
+                            final res = await ref
                                 .read(checkoutRepositoryProvider)
                                 .cancelOrder(
                                   orderId: order.id,
@@ -815,11 +986,30 @@ class OrderDetailScreen extends ConsumerWidget {
 
                             ref.invalidate(orderDetailProvider(order.id));
                             ref.invalidate(customerOrdersProvider);
+                            ref.invalidate(walletAccountProvider);
+                            ref.invalidate(walletTransactionsProvider);
+
+                            final isPaid =
+                                order.paymentStatus.toUpperCase() ==
+                                'COMPLETED';
+                            String successMsg;
+                            if (!isPaid) {
+                              successMsg = 'Order cancelled.';
+                            } else if (order.walletAmountUsed > 0 &&
+                                order.gatewayAmount == 0) {
+                              successMsg =
+                                  'Order cancelled. ${AppStrings.currencySymbol}${order.walletAmountUsed.toStringAsFixed(0)} has been credited to your FreshMarket Wallet.';
+                            } else if (res['error_code'] != null &&
+                                res['error_code'].toString().isNotEmpty) {
+                              successMsg = 'Order cancelled, but the refund needs attention.';
+                            } else {
+                              successMsg = 'Order cancelled. Refund processing has started.';
+                            }
 
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Order cancelled successfully'),
+                                SnackBar(
+                                  content: Text(successMsg),
                                   backgroundColor: AppColors.error,
                                 ),
                               );

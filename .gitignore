@@ -63,3 +63,6 @@ android/build/
 *.jks
 *.keystore
 key.properties
+
+# Scratch & QA recovery logs
+scratch/

@@ -1,5 +1,5 @@
-import { createClient } from "jsr:@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { createServiceClient, createUserClient } from "../_shared/keys.ts";
 
 function mapCancelError(errorMsg: string): { code: string; message: string } {
   if (errorMsg.includes("ORDER_NOT_FOUND")) {
@@ -41,17 +41,12 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const anonKey =
-      Deno.env.get("SUPABASE_ANON_KEY") ??
-      Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ??
-      "";
-    const serviceRoleKey =
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
-      Deno.env.get("SUPABASE_SECRET_KEY") ??
-      "";
-
-    if (!supabaseUrl || !serviceRoleKey) {
+    let userClient;
+    let adminClient;
+    try {
+      userClient = createUserClient(authHeader);
+      adminClient = createServiceClient();
+    } catch {
       return new Response(
         JSON.stringify({
           success: false,
@@ -64,12 +59,6 @@ Deno.serve(async (req: Request) => {
         }
       );
     }
-
-    // 1. Authenticate user from incoming JWT
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-      auth: { persistSession: false },
-    });
 
     const {
       data: { user },
@@ -126,9 +115,6 @@ Deno.serve(async (req: Request) => {
     }
 
     // 3. Check order payment status to determine cancellation path
-    const adminClient = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false },
-    });
 
     const { data: order, error: orderFetchError } = await adminClient
       .from("orders")

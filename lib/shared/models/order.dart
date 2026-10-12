@@ -1,3 +1,7 @@
+import 'refund.dart';
+
+export 'refund.dart';
+
 enum OrderStatus {
   paymentPending('Awaiting Payment'),
   orderPlaced('Order Placed'),
@@ -123,6 +127,7 @@ class CustomerOrder {
     this.walletAmountUsed = 0.0,
     this.gatewayAmount = 0.0,
     this.refundStatus,
+    this.refund,
     required this.deliveryAddress,
     required this.deliverySlot,
     required this.createdAt,
@@ -145,6 +150,7 @@ class CustomerOrder {
   final double walletAmountUsed;
   final double gatewayAmount;
   final String? refundStatus;
+  final RefundModel? refund;
   final String deliveryAddress;
   final String deliverySlot;
   final DateTime createdAt;
@@ -152,6 +158,10 @@ class CustomerOrder {
   final String? cancellationReason;
   final DateTime? cancelledAt;
   final List<OrderStatusHistoryItem> statusHistory;
+
+  RefundStatus? get typedRefundStatus =>
+      refund?.status ??
+      (refundStatus != null ? RefundStatus.fromString(refundStatus) : null);
 
   bool get isPaymentPending => status == OrderStatus.paymentPending;
   bool get canCancelPayment => status == OrderStatus.paymentPending;
@@ -213,14 +223,18 @@ class CustomerOrder {
       slotStr = snap['name'] as String? ?? slotStr;
     }
 
-    // Refund status from relation or field
+    // Refund model and status from relation or field
+    RefundModel? refundObj;
     String? refundStat = json['refund_status'] as String?;
-    if (refundStat == null &&
-        json['refunds'] != null &&
+    if (json['refunds'] != null &&
         json['refunds'] is List &&
         (json['refunds'] as List).isNotEmpty) {
       final r = (json['refunds'] as List).first as Map<String, dynamic>;
-      refundStat = r['status'] as String?;
+      refundObj = RefundModel.fromJson(r);
+      refundStat = refundObj.status.name;
+    } else if (json['refund'] != null && json['refund'] is Map) {
+      refundObj = RefundModel.fromJson(json['refund'] as Map<String, dynamic>);
+      refundStat = refundObj.status.name;
     }
 
     return CustomerOrder(
@@ -237,10 +251,10 @@ class CustomerOrder {
       status: parsedStatus,
       paymentMethod: (json['payment_method'] as String? ?? 'COD').toUpperCase(),
       paymentStatus: payStatus,
-      walletAmountUsed:
-          (json['wallet_amount_used'] as num?)?.toDouble() ?? 0.0,
+      walletAmountUsed: (json['wallet_amount_used'] as num?)?.toDouble() ?? 0.0,
       gatewayAmount: (json['gateway_amount'] as num?)?.toDouble() ?? 0.0,
       refundStatus: refundStat,
+      refund: refundObj,
       deliveryAddress: addressStr,
       deliverySlot: slotStr,
       createdAt: DateTime.parse(json['created_at'] as String),

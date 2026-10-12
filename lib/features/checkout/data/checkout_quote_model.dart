@@ -117,8 +117,14 @@ class CheckoutQuote {
         .toList();
 
     final gTotal = (json['grand_total'] as num?)?.toDouble() ?? 0.0;
-    final wApplied = ((json['wallet_amount_applied'] ?? json['wallet_amount']) as num?)?.toDouble() ?? 0.0;
-    final gPayable = ((json['gateway_payable'] ?? (gTotal - wApplied)) as num?)?.toDouble() ?? gTotal;
+    final wApplied =
+        ((json['wallet_amount_applied'] ?? json['wallet_amount']) as num?)
+            ?.toDouble() ??
+        0.0;
+    final gPayable =
+        ((json['gateway_payable'] ?? (gTotal - wApplied)) as num?)
+            ?.toDouble() ??
+        gTotal;
 
     return CheckoutQuote(
       cartId: json['cart_id'] as String? ?? '',
@@ -138,7 +144,8 @@ class CheckoutQuote {
       walletAvailable: (json['wallet_available'] as num?)?.toDouble() ?? 0.0,
       walletAmountApplied: wApplied,
       gatewayPayable: gPayable,
-      isWalletOnly: json['is_wallet_only'] as bool? ?? (gPayable <= 0 && wApplied > 0),
+      isWalletOnly:
+          json['is_wallet_only'] as bool? ?? (gPayable <= 0 && wApplied > 0),
       grandTotal: gTotal,
       codPayableTotal:
           ((json['cod_payable_total'] ?? json['cod_payable']) as num?)

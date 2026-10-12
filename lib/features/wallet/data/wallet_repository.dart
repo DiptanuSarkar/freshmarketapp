@@ -4,9 +4,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/supabase/supabase_client_provider.dart';
 import '../../../core/supabase/supabase_exception_mapper.dart';
 import '../../../core/supabase/supabase_tables.dart';
+import '../../../shared/models/wallet_account.dart';
 import '../../../shared/models/wallet_transaction.dart';
 
 abstract class IWalletRepository {
+  Future<WalletAccount> getAccount();
   Future<double> getBalance();
   Future<List<WalletTransaction>> getTransactions();
 }
@@ -17,22 +19,28 @@ class SupabaseWalletRepository implements IWalletRepository {
   final SupabaseClient _supabase;
 
   @override
-  Future<double> getBalance() async {
+  Future<WalletAccount> getAccount() async {
     try {
       final user = _supabase.auth.currentUser;
-      if (user == null) return 0.0;
+      if (user == null) return WalletAccount.zero();
 
       final res = await _supabase
           .from(SupabaseTables.walletAccounts)
-          .select('balance')
+          .select('balance, reserved_balance')
           .eq('user_id', user.id)
           .maybeSingle();
 
-      if (res == null) return 0.0;
-      return (res['balance'] as num?)?.toDouble() ?? 0.0;
+      if (res == null) return WalletAccount.zero();
+      return WalletAccount.fromJson(res);
     } catch (e, stackTrace) {
       throw SupabaseExceptionMapper.map(e, stackTrace);
     }
+  }
+
+  @override
+  Future<double> getBalance() async {
+    final account = await getAccount();
+    return account.availableBalance;
   }
 
   @override
@@ -64,11 +72,20 @@ final walletRepositoryProvider = Provider<IWalletRepository>((ref) {
   return SupabaseWalletRepository(supabase);
 });
 
-final walletBalanceProvider = FutureProvider<double>((ref) async {
+final walletAccountProvider = FutureProvider<WalletAccount>((ref) async {
   final user = ref.watch(currentUserProvider);
-  if (user == null) return 0.0;
+  if (user == null) return WalletAccount.zero();
   final repo = ref.watch(walletRepositoryProvider);
-  return repo.getBalance();
+  return repo.getAccount();
+});
+
+final walletBalanceProvider = FutureProvider<double>((ref) async {
+  final accountAsync = ref.watch(walletAccountProvider);
+  return accountAsync.when(
+    data: (account) => account.availableBalance,
+    loading: () => 0.0,
+    error: (error, stack) => 0.0,
+  );
 });
 
 final walletTransactionsProvider = FutureProvider<List<WalletTransaction>>((

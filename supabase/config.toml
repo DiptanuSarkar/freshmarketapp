@@ -426,3 +426,18 @@ verify_jwt = false
 [functions.check-payment-status]
 verify_jwt = true
 
+[functions.checkout-quote]
+verify_jwt = true
+
+[functions.create-cod-order]
+verify_jwt = true
+
+[functions.create-wallet-payment-order]
+verify_jwt = true
+
+[functions.cancel-order]
+verify_jwt = true
+
+[functions.check-refund-status]
+verify_jwt = true
+

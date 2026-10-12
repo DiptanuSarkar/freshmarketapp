@@ -57,6 +57,13 @@ abstract final class SupabaseExceptionMapper {
           code: 'weak_password',
         );
       }
+      if (msg.contains('provider') &&
+          (msg.contains('not enabled') || msg.contains('disabled'))) {
+        return const AppException(
+          'Google authentication provider is not enabled in the Supabase backend.',
+          code: 'provider_disabled',
+        );
+      }
       return AppException(error.message, code: error.statusCode);
     }
 
@@ -106,6 +113,14 @@ abstract final class SupabaseExceptionMapper {
       return const AppException(
         'No internet connection. Please check your network and try again.',
         code: 'network_error',
+      );
+    }
+
+    if (str.contains('provider') &&
+        (str.contains('not enabled') || str.contains('disabled'))) {
+      return const AppException(
+        'Google authentication provider is not enabled in the Supabase backend.',
+        code: 'provider_disabled',
       );
     }
 
