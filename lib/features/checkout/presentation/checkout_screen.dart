@@ -412,6 +412,45 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                                           color: AppColors.textSecondary,
                                         ),
                                       ),
+                                      const SizedBox(width: 8),
+                                      if (selectedAddress.isMapVerified)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 7,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.success.withValues(
+                                              alpha: 0.12,
+                                            ),
+                                            borderRadius:
+                                                AppDimensions.roundedPill,
+                                            border: Border.all(
+                                              color: AppColors.success
+                                                  .withValues(alpha: 0.3),
+                                              width: 0.8,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: const [
+                                              Icon(
+                                                Icons.check_circle_rounded,
+                                                size: 10,
+                                                color: AppColors.success,
+                                              ),
+                                              SizedBox(width: 3),
+                                              Text(
+                                                'VERIFIED ON MAP',
+                                                style: TextStyle(
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: AppColors.success,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
                                     ],
                                   ),
                                   const SizedBox(height: 4),
@@ -423,6 +462,65 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                                       height: 1.3,
                                     ),
                                   ),
+                                  if (!selectedAddress.isMapVerified) ...[
+                                    const SizedBox(height: 6),
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.warning.withValues(
+                                          alpha: 0.1,
+                                        ),
+                                        borderRadius: AppDimensions.roundedSm,
+                                        border: Border.all(
+                                          color: AppColors.warning.withValues(
+                                            alpha: 0.35,
+                                          ),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.location_off_rounded,
+                                            size: 16,
+                                            color: AppColors.warning,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          const Expanded(
+                                            child: Text(
+                                              'Pin not verified on map. Pinpoint doorstep for delivery.',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                                color: AppColors.textPrimary,
+                                              ),
+                                            ),
+                                          ),
+                                          TextButton(
+                                            onPressed: () => context.push(
+                                              '${AppRoutes.editAddressPrefix}/${selectedAddress.id}/edit',
+                                            ),
+                                            style: TextButton.styleFrom(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                  ),
+                                              minimumSize: Size.zero,
+                                              tapTargetSize:
+                                                  MaterialTapTargetSize
+                                                      .shrinkWrap,
+                                            ),
+                                            child: const Text(
+                                              'Verify on Map',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w800,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
                                   const SizedBox(height: 8),
 
                                   // Serviceability Status Banner
@@ -1175,9 +1273,12 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final quote = quoteAsync.value;
     final grandTotalDisplay = quote?.grandTotal ?? cartState.totalPayable;
     final isStockValid = quote?.stockValid ?? true;
+    final isAddressVerified =
+        selectedAddress != null && selectedAddress.isMapVerified;
     final canPlaceOrder =
         cartState.items.isNotEmpty &&
         selectedAddress != null &&
+        isAddressVerified &&
         isServiceable &&
         slotId != null &&
         isStockValid &&
@@ -1202,6 +1303,15 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           : (isOnline ? 'Connecting Gateway...' : 'Placing Order...');
       buttonIcon = Icons.sync;
       buttonAction = null;
+    } else if (selectedAddress != null && !isAddressVerified) {
+      subtitle = 'Verification Required';
+      displayAmount =
+          '${AppStrings.currencySymbol}${grandTotalDisplay.toStringAsFixed(0)}';
+      buttonLabel = 'Verify Address on Map';
+      buttonIcon = Icons.pin_drop_rounded;
+      buttonAction = () => context.push(
+        '${AppRoutes.editAddressPrefix}/${selectedAddress.id}/edit',
+      );
     } else if (isWalletOnly) {
       subtitle = 'Covered by Wallet';
       displayAmount =

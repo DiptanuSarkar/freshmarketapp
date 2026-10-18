@@ -31,6 +31,14 @@ class UserAddress {
   final double? longitude;
   final bool isDefault;
 
+  bool get isMapVerified =>
+      latitude != null &&
+      longitude != null &&
+      latitude! >= -90.0 &&
+      latitude! <= 90.0 &&
+      longitude! >= -180.0 &&
+      longitude! <= 180.0;
+
   String get formattedAddress {
     final parts = [
       houseOrFlat,

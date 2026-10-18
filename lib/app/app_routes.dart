@@ -34,6 +34,8 @@ abstract final class AppRoutes {
   static const String wishlist = '/wishlist';
   static const String addresses = '/addresses';
   static const String addAddress = '/addresses/add';
+  static const String editAddress = '/addresses/:id/edit';
+  static const String editAddressPrefix = '/addresses';
   static const String wallet = '/wallet';
   static const String notifications = '/notifications';
   static const String aboutUs = '/about-us';

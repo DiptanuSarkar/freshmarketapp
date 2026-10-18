@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../features/address/presentation/map_address_screen.dart';
 import '../features/address/presentation/saved_addresses_screen.dart';
 import '../features/auth/presentation/forgot_password_screen.dart';
 import '../features/auth/presentation/login_screen.dart';
@@ -196,6 +197,19 @@ abstract final class AppRouter {
         parentNavigatorKey: _rootNavigatorKey,
         path: AppRoutes.addresses,
         builder: (context, state) => const SavedAddressesScreen(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: AppRoutes.addAddress,
+        builder: (context, state) => const MapAddressScreen(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: AppRoutes.editAddress,
+        builder: (context, state) {
+          final id = state.pathParameters['id'];
+          return MapAddressScreen(addressId: id);
+        },
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,

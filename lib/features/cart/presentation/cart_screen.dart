@@ -194,14 +194,27 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                selectedAddress != null
-                                    ? 'Delivering to ${selectedAddress.tag}'
-                                    : 'Select Delivery Address',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
+                              Row(
+                                children: [
+                                  Text(
+                                    selectedAddress != null
+                                        ? 'Delivering to ${selectedAddress.tag}'
+                                        : 'Select Delivery Address',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  if (selectedAddress?.isMapVerified ==
+                                      true) ...[
+                                    const SizedBox(width: 4),
+                                    const Icon(
+                                      Icons.check_circle_rounded,
+                                      size: 13,
+                                      color: AppColors.success,
+                                    ),
+                                  ],
+                                ],
                               ),
                               Text(
                                 selectedAddress?.formattedAddress ??

@@ -4,11 +4,48 @@ import '../../core/supabase/supabase_client_provider.dart';
 import '../../features/address/data/address_repository.dart';
 import '../models/address.dart';
 
+enum AddressFetchStatus { initial, loading, success, error }
+
+class AddressFetchState {
+  const AddressFetchState({
+    this.status = AddressFetchStatus.initial,
+    this.errorMessage,
+  });
+
+  final AddressFetchStatus status;
+  final String? errorMessage;
+
+  bool get isLoading => status == AddressFetchStatus.loading;
+  bool get hasError => status == AddressFetchStatus.error;
+  bool get isSuccess => status == AddressFetchStatus.success;
+}
+
+class AddressFetchStateNotifier extends Notifier<AddressFetchState> {
+  @override
+  AddressFetchState build() {
+    return const AddressFetchState(status: AddressFetchStatus.loading);
+  }
+
+  void update(AddressFetchState newState) {
+    state = newState;
+  }
+}
+
+final addressFetchStateProvider =
+    NotifierProvider<AddressFetchStateNotifier, AddressFetchState>(
+      AddressFetchStateNotifier.new,
+    );
+
 class AddressNotifier extends Notifier<List<UserAddress>> {
   @override
   List<UserAddress> build() {
     final user = ref.watch(currentUserProvider);
-    if (user == null) return const [];
+    if (user == null) {
+      ref
+          .read(addressFetchStateProvider.notifier)
+          .update(const AddressFetchState(status: AddressFetchStatus.success));
+      return const [];
+    }
 
     Future.microtask(() => loadAddresses());
     return const [];
@@ -18,14 +55,32 @@ class AddressNotifier extends Notifier<List<UserAddress>> {
     final user = ref.read(currentUserProvider);
     if (user == null) {
       state = const [];
+      ref
+          .read(addressFetchStateProvider.notifier)
+          .update(const AddressFetchState(status: AddressFetchStatus.success));
       return;
     }
+
+    ref
+        .read(addressFetchStateProvider.notifier)
+        .update(const AddressFetchState(status: AddressFetchStatus.loading));
+
     try {
       final repo = ref.read(addressRepositoryProvider);
       final list = await repo.getAddresses();
       state = list;
-    } catch (_) {
-      // Keep existing state
+      ref
+          .read(addressFetchStateProvider.notifier)
+          .update(const AddressFetchState(status: AddressFetchStatus.success));
+    } catch (e) {
+      ref
+          .read(addressFetchStateProvider.notifier)
+          .update(
+            AddressFetchState(
+              status: AddressFetchStatus.error,
+              errorMessage: e.toString(),
+            ),
+          );
     }
   }
 

@@ -62,6 +62,14 @@ class HomeHeader extends ConsumerWidget {
                             color: AppColors.textPrimary,
                           ),
                         ),
+                        if (selectedAddress?.isMapVerified == true) ...[
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.check_circle_rounded,
+                            size: 13,
+                            color: AppColors.success,
+                          ),
+                        ],
                         const Icon(
                           Icons.keyboard_arrow_down_rounded,
                           size: 16,

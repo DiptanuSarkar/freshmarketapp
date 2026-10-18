@@ -1,0 +1,8 @@
+## Flutter SDK configuration
+# sdk.dir=/path/to/android/sdk
+# flutter.sdk=/path/to/flutter
+
+## Google Maps Platform Android Development Key
+# Obtain a restricted API key (Maps SDK for Android, package com.freshmarket.app, debug SHA-1)
+# and add it to your local android/local.properties file. Never commit real keys to Git.
+MAPS_API_KEY=YOUR_DEVELOPMENT_MAPS_API_KEY_HERE
