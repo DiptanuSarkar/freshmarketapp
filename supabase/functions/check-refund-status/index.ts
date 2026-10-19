@@ -1,5 +1,6 @@
 import { corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/keys.ts";
+import { createCustomerNotification } from "../_shared/notifications.ts";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -166,6 +167,21 @@ Deno.serve(async (req: Request) => {
 
             if (updatedRows) {
               Object.assign(refund, updatedRows);
+
+              if (refund.status === "processed") {
+                await createCustomerNotification(adminClient, {
+                  userId: user.id,
+                  title: "Refund Completed",
+                  body: `Your refund of ₹${refund.total_amount || ""} has been completed.`,
+                  type: "refund_processed",
+                  data: {
+                    order_id: refund.order_id,
+                    refund_id: refund.id,
+                    total_amount: refund.total_amount,
+                  },
+                  eventKey: `refund:${refund.id}:processed`,
+                });
+              }
             }
           }
         }

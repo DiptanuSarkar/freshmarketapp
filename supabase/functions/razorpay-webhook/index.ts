@@ -1,4 +1,5 @@
 import { createServiceClient } from "../_shared/keys.ts";
+import { createCustomerNotification } from "../_shared/notifications.ts";
 
 function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -190,6 +191,28 @@ Deno.serve(async (req: Request) => {
               });
             }
 
+            // Fetch order for customer notification
+            const { data: ord } = await adminClient
+              .from("orders")
+              .select("user_id, order_number, total")
+              .eq("id", dbPayment.order_id)
+              .maybeSingle();
+
+            if (ord) {
+              await createCustomerNotification(adminClient, {
+                userId: ord.user_id,
+                title: "Payment Successful",
+                body: `Payment of ₹${ord.total || ""} for order #${ord.order_number || ""} was successful.`,
+                type: "payment_completed",
+                data: {
+                  order_id: dbPayment.order_id,
+                  order_number: ord.order_number,
+                  payment_id: rzPaymentId,
+                },
+                eventKey: `payment:${rzPaymentId}:completed`,
+              });
+            }
+
             await adminClient
               .from("payment_webhook_events")
               .update({
@@ -251,6 +274,28 @@ Deno.serve(async (req: Request) => {
             p_error_code: refundEntity.status === "failed" ? (refundEntity.error_code || "REFUND_FAILED") : null,
             p_error_message: refundEntity.status === "failed" ? (refundEntity.error_description || "Razorpay refund failed") : null,
           });
+
+          // Fetch order to notify customer of payment failure
+          const { data: ord } = await adminClient
+            .from("orders")
+            .select("user_id, order_number")
+            .eq("id", dbPayment.order_id)
+            .maybeSingle();
+
+          if (ord) {
+            await createCustomerNotification(adminClient, {
+              userId: ord.user_id,
+              title: "Payment Failed",
+              body: `Payment for order #${ord.order_number || ""} failed. Tap to retry.`,
+              type: "payment_failed",
+              data: {
+                order_id: dbPayment.order_id,
+                order_number: ord.order_number,
+                payment_id: rzPaymentId,
+              },
+              eventKey: `payment:${rzPaymentId}:failed`,
+            });
+          }
 
           await adminClient
             .from("payment_webhook_events")

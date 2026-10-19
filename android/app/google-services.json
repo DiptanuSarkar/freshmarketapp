@@ -1,0 +1,68 @@
+{
+  "project_info": {
+    "project_number": "80901106098",
+    "firebase_url": "https://fresh-market-cbf43.firebaseio.com",
+    "project_id": "fresh-market-cbf43",
+    "storage_bucket": "fresh-market-cbf43.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:80901106098:android:a681ea6740818a41431cab",
+        "android_client_info": {
+          "package_name": "com.freshmarket.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDODk_vlFy78FTYmfeB2vbKaU3H_GftCc4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:80901106098:android:2657b62bbc96e23e431cab",
+        "android_client_info": {
+          "package_name": "com.freshmarket.webapplication"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDODk_vlFy78FTYmfeB2vbKaU3H_GftCc4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:80901106098:android:099ca94285c336e8431cab",
+        "android_client_info": {
+          "package_name": "com.freshmarkets.freshmarket"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDODk_vlFy78FTYmfeB2vbKaU3H_GftCc4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

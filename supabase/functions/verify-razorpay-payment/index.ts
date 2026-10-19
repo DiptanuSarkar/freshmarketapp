@@ -1,5 +1,6 @@
 import { corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/keys.ts";
+import { createCustomerNotification } from "../_shared/notifications.ts";
 
 function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -408,6 +409,20 @@ Deno.serve(async (req: Request) => {
         );
       }
     }
+
+    // Enqueue payment success notification (idempotent per razorpay_payment_id)
+    await createCustomerNotification(adminClient, {
+      userId: user.id,
+      title: "Payment Successful",
+      body: `Payment of ₹${order.total || ""} for order #${order.order_number || ""} was successful.`,
+      type: "payment_completed",
+      data: {
+        order_id: internal_order_id,
+        order_number: order.order_number,
+        payment_id: razorpay_payment_id,
+      },
+      eventKey: `payment:${razorpay_payment_id}:completed`,
+    });
 
     return new Response(
       JSON.stringify({

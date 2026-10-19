@@ -1,5 +1,6 @@
 import { corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/keys.ts";
+import { createCustomerNotification } from "../_shared/notifications.ts";
 
 function mapErrorToResponse(errorMsg: string): { code: string; message: string } {
   if (errorMsg.includes("EMPTY_CART")) {
@@ -236,6 +237,21 @@ Deno.serve(async (req: Request) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
+    }
+
+    if (orderResult && orderResult.id) {
+      await createCustomerNotification(adminClient, {
+        userId: user.id,
+        title: "Order Confirmed - Cash on Delivery",
+        body: `Your order #${orderResult.order_number || ""} for ₹${orderResult.total || ""} has been placed successfully.`,
+        type: "order_placed",
+        data: {
+          order_id: orderResult.id,
+          order_number: orderResult.order_number,
+          total: orderResult.total,
+        },
+        eventKey: `order:${orderResult.id}:placed`,
+      });
     }
 
     return new Response(JSON.stringify(orderResult), {

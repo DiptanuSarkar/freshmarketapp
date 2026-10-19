@@ -7,6 +7,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_dimensions.dart';
 import '../../../../core/widgets/buttons/app_icon_button.dart';
 import '../../../../shared/providers/address_provider.dart';
+import '../../../notifications/data/notifications_repository.dart';
 
 class HomeHeader extends ConsumerWidget {
   const HomeHeader({super.key});
@@ -102,11 +103,17 @@ class HomeHeader extends ConsumerWidget {
           const SizedBox(width: AppDimensions.xs),
 
           // Notifications Action
-          AppIconButton(
-            icon: Icons.notifications_none_rounded,
-            badgeCount: 2,
-            onPressed: () => context.push(AppRoutes.notifications),
-            tooltip: 'Notifications',
+          Consumer(
+            builder: (context, ref, _) {
+              final unreadCount =
+                  ref.watch(unreadNotificationsCountProvider).value ?? 0;
+              return AppIconButton(
+                icon: Icons.notifications_none_rounded,
+                badgeCount: unreadCount > 0 ? unreadCount : null,
+                onPressed: () => context.push(AppRoutes.notifications),
+                tooltip: 'Notifications',
+              );
+            },
           ),
         ],
       ),

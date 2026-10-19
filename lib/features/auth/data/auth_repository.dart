@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/notifications/fcm_token_service.dart';
 import '../../../core/supabase/supabase_client_provider.dart';
 import '../../../core/supabase/supabase_exception_mapper.dart';
 
@@ -139,6 +140,11 @@ class SupabaseAuthRepository implements IAuthRepository {
 
   @override
   Future<void> signOut() async {
+    try {
+      await FcmTokenService.instance.unregisterOnLogout();
+    } catch (_) {
+      // Do not block logout if token deactivation encounters network error
+    }
     try {
       await _googleSignIn.signOut();
     } catch (_) {

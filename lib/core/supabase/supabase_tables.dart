@@ -27,6 +27,7 @@ abstract final class SupabaseTables {
   static const String walletAccounts = 'wallet_accounts';
   static const String walletTransactions = 'wallet_transactions';
   static const String notifications = 'notifications';
+  static const String fcmTokens = 'fcm_tokens';
   static const String contactMessages = 'contact_messages';
   static const String appSettings = 'app_settings';
 

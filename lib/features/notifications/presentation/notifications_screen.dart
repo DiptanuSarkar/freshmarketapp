@@ -1,22 +1,57 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
+import '../../../core/notifications/notification_permission_service.dart';
 import '../../../core/widgets/feedback/app_empty_state.dart';
 import '../../../core/widgets/feedback/app_error_widget.dart';
 import '../../../core/widgets/feedback/app_loading_indicator.dart';
 import '../../../shared/models/notification_item.dart';
 import '../data/notifications_repository.dart';
 
-class NotificationsScreen extends ConsumerWidget {
+final pushPermissionStatusProvider =
+    FutureProvider.autoDispose<AuthorizationStatus>((ref) async {
+      return NotificationPermissionService.instance.getPermissionStatus();
+    });
+
+class NotificationsScreen extends ConsumerStatefulWidget {
   const NotificationsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<NotificationsScreen> createState() =>
+      _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends ConsumerState<NotificationsScreen>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.invalidate(pushPermissionStatusProvider);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final notificationsAsync = ref.watch(notificationsListProvider);
+    final permissionAsync = ref.watch(pushPermissionStatusProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -36,51 +71,147 @@ class NotificationsScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: notificationsAsync.when(
-        loading: () => const Center(
-          child: AppLoadingIndicator(message: 'Loading notifications...'),
-        ),
-        error: (err, stack) => AppErrorWidget(
-          title: "Couldn't load notifications",
-          message: 'Please check your connection and try again.',
-          onRetry: () => ref.refresh(notificationsListProvider),
-        ),
-        data: (notifications) {
-          if (notifications.isEmpty) {
-            return const AppEmptyState(
-              title: 'No Notifications Yet',
-              message: 'We will update you here about butchery status, live delivery updates, and exclusive fresh offers.',
-              icon: Icons.notifications_none_rounded,
-            );
-          }
+      body: Column(
+        children: [
+          // Push Notification Permission Status Banner
+          _buildSettingsHeader(permissionAsync),
+          Expanded(
+            child: notificationsAsync.when(
+              loading: () => const Center(
+                child: AppLoadingIndicator(message: 'Loading notifications...'),
+              ),
+              error: (err, stack) => AppErrorWidget(
+                title: "Couldn't load notifications",
+                message: 'Please check your connection and try again.',
+                onRetry: () => ref.refresh(notificationsListProvider),
+              ),
+              data: (notifications) {
+                if (notifications.isEmpty) {
+                  return const AppEmptyState(
+                    title: 'No Notifications Yet',
+                    message: 'We will update you here about order status, delivery tracking, and fresh offers.',
+                    icon: Icons.notifications_none_rounded,
+                  );
+                }
 
-          return RefreshIndicator(
-            onRefresh: () async {
-              ref.invalidate(notificationsListProvider);
-              ref.invalidate(unreadNotificationsCountProvider);
-              await ref.read(notificationsListProvider.future);
-            },
-            child: ListView.separated(
-              padding: const EdgeInsets.all(AppDimensions.lg),
-              itemCount: notifications.length,
-              separatorBuilder: (context, index) =>
-                  const SizedBox(height: AppDimensions.sm),
-              itemBuilder: (context, index) {
-                final notif = notifications[index];
-                return _buildNotificationCard(context, ref, notif);
+                return RefreshIndicator(
+                  onRefresh: () async {
+                    ref.invalidate(notificationsListProvider);
+                    ref.invalidate(unreadNotificationsCountProvider);
+                    await ref.read(notificationsListProvider.future);
+                  },
+                  child: ListView.separated(
+                    padding: const EdgeInsets.all(AppDimensions.lg),
+                    itemCount: notifications.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: AppDimensions.sm),
+                    itemBuilder: (context, index) {
+                      final notif = notifications[index];
+                      return _buildNotificationCard(context, notif);
+                    },
+                  ),
+                );
               },
             ),
-          );
-        },
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildNotificationCard(
-    BuildContext context,
-    WidgetRef ref,
-    NotificationItem notif,
-  ) {
+  Widget _buildSettingsHeader(AsyncValue<AuthorizationStatus> permissionAsync) {
+    final status = permissionAsync.value ?? AuthorizationStatus.notDetermined;
+    final isGranted =
+        status == AuthorizationStatus.authorized ||
+        status == AuthorizationStatus.provisional;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(
+        AppDimensions.lg,
+        AppDimensions.sm,
+        AppDimensions.lg,
+        AppDimensions.xs,
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppDimensions.md,
+        vertical: AppDimensions.sm,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: AppDimensions.roundedMd,
+        border: Border.all(color: AppColors.surfaceBorder),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isGranted
+                ? Icons.notifications_active_rounded
+                : Icons.notifications_off_outlined,
+            size: 20,
+            color: isGranted ? AppColors.success : AppColors.warning,
+          ),
+          const SizedBox(width: AppDimensions.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Push Notifications',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                Text(
+                  isGranted
+                      ? 'System push alerts are active'
+                      : 'Disabled in OS. Tap to allow order alerts.',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: isGranted
+                        ? AppColors.textSecondary
+                        : AppColors.textTertiary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              minimumSize: const Size(50, 30),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            onPressed: () async {
+              if (!isGranted) {
+                final result = await NotificationPermissionService.instance
+                    .requestPermission();
+                if (result.authorizationStatus == AuthorizationStatus.denied) {
+                  // Direct user to Android application notification settings
+                  await Geolocator.openAppSettings();
+                }
+              } else {
+                await Geolocator.openAppSettings();
+              }
+              ref.invalidate(pushPermissionStatusProvider);
+            },
+            child: Text(
+              isGranted ? 'Settings' : 'Enable',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: isGranted ? AppColors.textSecondary : AppColors.primary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNotificationCard(BuildContext context, NotificationItem notif) {
     final timeStr = DateFormat('dd MMM, hh:mm a').format(notif.createdAt);
 
     IconData iconData;

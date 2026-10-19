@@ -1,5 +1,6 @@
 import { corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/keys.ts";
+import { createCustomerNotification } from "../_shared/notifications.ts";
 
 function mapCancelError(errorMsg: string): { code: string; message: string } {
   if (errorMsg.includes("ORDER_NOT_FOUND")) {
@@ -216,6 +217,34 @@ Deno.serve(async (req: Request) => {
             console.error("Razorpay refund network error:", rzErr);
           }
         }
+      }
+
+      if (refundResult && refundResult.refund_id) {
+        let refundMsg = "Your refund has been initiated.";
+        const walletAmt = Number(refundResult.wallet_refund_amount || 0);
+        const gatewayAmt = Number(refundResult.gateway_refund_amount || 0);
+
+        if (walletAmt > 0 && gatewayAmt > 0) {
+          refundMsg = `₹${walletAmt} has been credited to your FreshMarket Wallet. Your ₹${gatewayAmt} online refund is processing.`;
+        } else if (walletAmt > 0) {
+          refundMsg = `₹${walletAmt} has been credited to your FreshMarket Wallet.`;
+        } else if (gatewayAmt > 0) {
+          refundMsg = `Your ₹${gatewayAmt} online refund is processing.`;
+        }
+
+        await createCustomerNotification(adminClient, {
+          userId: user.id,
+          title: "Refund Initiated",
+          body: refundMsg,
+          type: "refund_initiated",
+          data: {
+            order_id: orderId,
+            refund_id: refundResult.refund_id,
+            wallet_amount: walletAmt,
+            gateway_amount: gatewayAmt,
+          },
+          eventKey: `refund:${refundResult.refund_id}:initiated`,
+        });
       }
 
       return new Response(JSON.stringify(refundResult), {

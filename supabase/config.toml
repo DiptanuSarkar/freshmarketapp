@@ -441,3 +441,12 @@ verify_jwt = true
 [functions.check-refund-status]
 verify_jwt = true
 
+[functions.register-fcm-token]
+verify_jwt = true
+
+[functions.unregister-fcm-token]
+verify_jwt = true
+
+[functions.dispatch-push-notifications]
+verify_jwt = false
+

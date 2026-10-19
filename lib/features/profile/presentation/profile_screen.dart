@@ -8,6 +8,7 @@ import '../../../core/constants/app_dimensions.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/supabase/supabase_client_provider.dart';
 import '../../auth/data/auth_provider.dart';
+import '../../notifications/data/notifications_repository.dart';
 import '../../wallet/data/wallet_repository.dart';
 import '../data/profile_repository.dart';
 
@@ -246,12 +247,50 @@ class ProfileScreen extends ConsumerWidget {
                     onTap: () => context.push(AppRoutes.addresses),
                   ),
                   const Divider(height: 1),
-                  _buildMenuTile(
-                    context,
-                    icon: Icons.notifications_none_rounded,
-                    title: 'Notifications',
-                    subtitle: 'Offers, dispatch alerts, and reminders',
-                    onTap: () => context.push(AppRoutes.notifications),
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final unread =
+                          ref.watch(unreadNotificationsCountProvider).value ??
+                          0;
+                      return _buildMenuTile(
+                        context,
+                        icon: Icons.notifications_none_rounded,
+                        title: 'Notifications',
+                        subtitle: 'Offers, dispatch alerts, and reminders',
+                        trailing: unread > 0
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: const BoxDecoration(
+                                      color: AppColors.accent,
+                                      borderRadius: AppDimensions.roundedPill,
+                                    ),
+                                    child: Text(
+                                      '$unread',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  const Icon(
+                                    Icons.chevron_right_rounded,
+                                    size: 18,
+                                    color: AppColors.textTertiary,
+                                  ),
+                                ],
+                              )
+                            : null,
+                        onTap: () => context.push(AppRoutes.notifications),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -412,6 +451,7 @@ class ProfileScreen extends ConsumerWidget {
     required String title,
     required String subtitle,
     required VoidCallback onTap,
+    Widget? trailing,
   }) {
     return ListTile(
       leading: Icon(icon, color: AppColors.primary, size: 22),
@@ -423,11 +463,13 @@ class ProfileScreen extends ConsumerWidget {
         subtitle,
         style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
       ),
-      trailing: const Icon(
-        Icons.chevron_right_rounded,
-        size: 18,
-        color: AppColors.textTertiary,
-      ),
+      trailing:
+          trailing ??
+          const Icon(
+            Icons.chevron_right_rounded,
+            size: 18,
+            color: AppColors.textTertiary,
+          ),
       onTap: onTap,
     );
   }

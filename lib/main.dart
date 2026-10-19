@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
@@ -11,6 +12,7 @@ import 'core/config/environment.dart';
 import 'core/constants/app_colors.dart';
 import 'core/constants/app_dimensions.dart';
 import 'core/constants/app_strings.dart';
+import 'core/notifications/notification_bootstrap.dart';
 
 Future<void> _bootstrap() async {
   // Validate build-time credentials
@@ -33,6 +35,20 @@ Future<void> _bootstrap() async {
   );
 
   runApp(const ProviderScope(child: FreshMarketApp()));
+
+  // Initialize Firebase and notifications asynchronously without blocking startup
+  unawaited(
+    NotificationBootstrap.initialize().catchError((error, stackTrace) {
+      if (kDebugMode) {
+        developer.log(
+          'Non-fatal notification bootstrap error: $error',
+          name: 'FreshMarketStartup',
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
+    }),
+  );
 }
 
 void main() async {

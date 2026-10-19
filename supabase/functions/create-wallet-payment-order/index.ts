@@ -1,5 +1,6 @@
 import { corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/keys.ts";
+import { createCustomerNotification } from "../_shared/notifications.ts";
 
 function mapErrorToResponse(errorMsg: string): { code: string; message: string } {
   if (errorMsg.includes("EMPTY_CART")) {
@@ -373,6 +374,22 @@ Deno.serve(async (req: Request) => {
         .from("carts")
         .update({ applied_coupon_id: null, updated_at: new Date().toISOString() })
         .eq("id", userCart.id);
+    }
+
+    if (orderData && orderData.id) {
+      await createCustomerNotification(adminClient, {
+        userId: user.id,
+        title: "Order Confirmed - Wallet Payment",
+        body: `Your order #${orderData.order_number || ""} for ₹${orderData.total || ""} was paid using FreshMarket Wallet.`,
+        type: "order_confirmed",
+        data: {
+          order_id: orderData.id,
+          order_number: orderData.order_number,
+          total: orderData.total,
+          payment_method: "wallet",
+        },
+        eventKey: `order:${orderData.id}:confirmed`,
+      });
     }
 
     return new Response(
