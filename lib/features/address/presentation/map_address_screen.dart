@@ -27,8 +27,8 @@ class MapAddressScreen extends ConsumerStatefulWidget {
 }
 
 class _MapAddressScreenState extends ConsumerState<MapAddressScreen> {
-  // Default fallback center (Bengaluru service area hub)
-  static const LatLng _fallbackHub = LatLng(12.9716, 77.5946);
+  // Default fallback center (Agartala city service hub)
+  static const LatLng _fallbackHub = LatLng(23.8312, 91.2824);
 
   GoogleMapController? _mapController;
   LatLng _cameraCenter = _fallbackHub;
@@ -272,20 +272,15 @@ class _MapAddressScreenState extends ConsumerState<MapAddressScreen> {
         _isCheckingServiceability = true;
       });
 
-      bool isServiceable = false;
-      String? areaName;
-      double? fee;
-      double? minFree;
-
-      if (geo.hasValidPostalCode) {
-        final area = await deliveryRepo.checkServiceability(geo.postalCode);
-        if (area != null) {
-          isServiceable = true;
-          areaName = area.name;
-          fee = area.deliveryCharge;
-          minFree = area.minOrderForFreeDelivery;
-        }
-      }
+      final serviceability = await deliveryRepo.checkCoordinatesServiceability(
+        lat,
+        lng,
+      );
+      final isServiceable = serviceability.serviceable;
+      final areaName =
+          serviceability.zoneName ?? (isServiceable ? 'Agartala City' : null);
+      final fee = serviceability.deliveryFee;
+      final minFree = serviceability.freeDeliveryThreshold;
 
       if (!mounted) return;
 
@@ -316,9 +311,11 @@ class _MapAddressScreenState extends ConsumerState<MapAddressScreen> {
     final cleanPin = pin.trim();
     if (!RegExp(r'^\d{6}$').hasMatch(cleanPin)) return;
 
-    setState(() => _isCheckingServiceability = true);
     final deliveryRepo = ref.read(deliveryRepositoryProvider);
-    final area = await deliveryRepo.checkServiceability(cleanPin);
+    final serviceability = await deliveryRepo.checkCoordinatesServiceability(
+      _cameraCenter.latitude,
+      _cameraCenter.longitude,
+    );
 
     if (!mounted) return;
     setState(() {
@@ -326,10 +323,12 @@ class _MapAddressScreenState extends ConsumerState<MapAddressScreen> {
       if (_selectedLocation != null) {
         _selectedLocation = _selectedLocation!.copyWith(
           postalCode: cleanPin,
-          isServiceable: area != null,
-          serviceAreaName: area?.name,
-          deliveryFee: area?.deliveryCharge,
-          minOrderForFreeDelivery: area?.minOrderForFreeDelivery,
+          isServiceable: serviceability.serviceable,
+          serviceAreaName:
+              serviceability.zoneName ??
+              (serviceability.serviceable ? 'Agartala City' : null),
+          deliveryFee: serviceability.deliveryFee,
+          minOrderForFreeDelivery: serviceability.freeDeliveryThreshold,
         );
       }
     });
@@ -365,10 +364,10 @@ class _MapAddressScreenState extends ConsumerState<MapAddressScreen> {
       final shouldProceed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Unsupported Delivery Location'),
-          content: Text(
-            'PIN code $pin is currently outside FreshMarket delivery areas. '
-            'You can still save this address, but online checkout will not be available until service expands.',
+          title: const Text('Outside Agartala Delivery Zone'),
+          content: const Text(
+            'FreshMarket currently delivers only within Agartala city. '
+            'You can still save this address, but online checkout will not be available until delivery expands to this area.',
           ),
           actions: [
             TextButton(
@@ -378,6 +377,7 @@ class _MapAddressScreenState extends ConsumerState<MapAddressScreen> {
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.warning,
+                foregroundColor: AppColors.surface,
               ),
               onPressed: () => Navigator.pop(ctx, true),
               child: const Text('Save Anyway'),
@@ -404,10 +404,10 @@ class _MapAddressScreenState extends ConsumerState<MapAddressScreen> {
         streetOrArea: _streetController.text.trim(),
         city: _cityController.text.trim().isNotEmpty
             ? _cityController.text.trim()
-            : 'Bengaluru',
+            : 'Agartala',
         state: _stateController.text.trim().isNotEmpty
             ? _stateController.text.trim()
-            : 'Karnataka',
+            : 'Tripura',
         pincode: pin,
         landmark: _landmarkController.text.trim().isEmpty
             ? null
@@ -731,7 +731,7 @@ class _MapAddressScreenState extends ConsumerState<MapAddressScreen> {
                         controller: _streetController,
                         decoration: const InputDecoration(
                           labelText: 'Street / Colony / Area *',
-                          hintText: 'e.g. 12th Main, Indiranagar',
+                          hintText: 'e.g. Banamalipur / City Centre, Agartala',
                           prefixIcon: Icon(Icons.signpost_outlined),
                         ),
                         validator: (val) {
@@ -881,7 +881,6 @@ class _MapAddressScreenState extends ConsumerState<MapAddressScreen> {
 
     final loc = _selectedLocation;
     final isServiceable = loc?.isServiceable ?? false;
-    final pin = _pincodeController.text.trim();
 
     return Container(
       padding: const EdgeInsets.all(AppDimensions.md),
@@ -928,12 +927,12 @@ class _MapAddressScreenState extends ConsumerState<MapAddressScreen> {
           // Serviceability Status
           if (_isCheckingServiceability)
             const Text(
-              'Checking delivery coverage for this area...',
+              'Checking Agartala delivery coverage...',
               style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
             )
           else if (isServiceable)
             Text(
-              'SERVICEABLE: Fresh delivery to ${loc?.serviceAreaName ?? 'this area'} • Fee ₹${loc?.deliveryFee?.toInt() ?? 30} (Free over ₹${loc?.minOrderForFreeDelivery?.toInt() ?? 499})',
+              'Delivery available in ${loc?.serviceAreaName ?? 'Agartala'} • Fee ₹${loc?.deliveryFee?.toInt() ?? 30} (Free over ₹${loc?.minOrderForFreeDelivery?.toInt() ?? 499})',
               style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
@@ -941,11 +940,9 @@ class _MapAddressScreenState extends ConsumerState<MapAddressScreen> {
               ),
             )
           else
-            Text(
-              pin.isNotEmpty
-                  ? 'PIN $pin: Delivery currently unavailable in this area'
-                  : 'Move pin or enter PIN to check delivery coverage',
-              style: const TextStyle(
+            const Text(
+              'FreshMarket currently delivers only within Agartala city.',
+              style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 color: AppColors.error,

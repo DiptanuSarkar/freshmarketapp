@@ -4,11 +4,17 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/supabase/supabase_client_provider.dart';
 import '../../../core/supabase/supabase_exception_mapper.dart';
 import '../../../core/supabase/supabase_tables.dart';
+import '../../../shared/models/address.dart';
+import '../../../shared/models/delivery_serviceability.dart';
 import '../../../shared/models/delivery_slot.dart';
 import '../../../shared/models/service_area.dart';
 
 abstract interface class IDeliveryRepository {
   Future<ServiceArea?> checkServiceability(String pincode);
+  Future<DeliveryServiceability> checkCoordinatesServiceability(
+    double latitude,
+    double longitude,
+  );
   Future<List<DeliverySlot>> getActiveDeliverySlots();
 }
 
@@ -33,6 +39,26 @@ class SupabaseDeliveryRepository implements IDeliveryRepository {
 
       if (response == null) return null;
       return ServiceArea.fromJson(response);
+    } catch (e) {
+      throw SupabaseExceptionMapper.map(e);
+    }
+  }
+
+  @override
+  Future<DeliveryServiceability> checkCoordinatesServiceability(
+    double latitude,
+    double longitude,
+  ) async {
+    try {
+      final response = await _supabase.rpc(
+        'rpc_check_delivery_serviceability',
+        params: {'p_latitude': latitude, 'p_longitude': longitude},
+      );
+
+      if (response is Map<String, dynamic>) {
+        return DeliveryServiceability.fromJson(response);
+      }
+      return DeliveryServiceability.outsideZone;
     } catch (e) {
       throw SupabaseExceptionMapper.map(e);
     }
@@ -71,4 +97,28 @@ final serviceAreaByPincodeProvider =
     FutureProvider.family<ServiceArea?, String>((ref, pincode) async {
       final repo = ref.watch(deliveryRepositoryProvider);
       return repo.checkServiceability(pincode);
+    });
+
+final coordinateServiceabilityProvider =
+    FutureProvider.family<DeliveryServiceability, ({double lat, double lng})>((
+      ref,
+      coords,
+    ) async {
+      final repo = ref.watch(deliveryRepositoryProvider);
+      return repo.checkCoordinatesServiceability(coords.lat, coords.lng);
+    });
+
+final addressServiceabilityProvider =
+    FutureProvider.family<DeliveryServiceability, UserAddress>((
+      ref,
+      address,
+    ) async {
+      if (!address.isMapVerified) {
+        return DeliveryServiceability.unverified;
+      }
+      final repo = ref.watch(deliveryRepositoryProvider);
+      return repo.checkCoordinatesServiceability(
+        address.latitude!,
+        address.longitude!,
+      );
     });

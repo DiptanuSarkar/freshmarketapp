@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/supabase/supabase_client_provider.dart';
 import '../../../shared/models/order.dart';
+import '../../../shared/providers/cart_provider.dart';
 import '../../orders/data/orders_repository.dart';
 import 'checkout_quote_model.dart';
 
@@ -344,11 +345,10 @@ class CheckoutQuoteParams {
       useWallet.hashCode;
 }
 
-final checkoutQuoteProvider =
-    FutureProvider.family<CheckoutQuote, CheckoutQuoteParams>((
-      ref,
-      params,
-    ) async {
+final checkoutQuoteProvider = FutureProvider.autoDispose
+    .family<CheckoutQuote, CheckoutQuoteParams>((ref, params) async {
+      // Invalidate and recompute quote whenever items in the cart change
+      ref.watch(cartProvider);
       final repo = ref.watch(checkoutRepositoryProvider);
       return repo.getCheckoutQuote(
         addressId: params.addressId,

@@ -382,7 +382,7 @@ async function run() {
 
   // Get address
   const addrRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/addresses?user_id=eq.${cust.user.id}&limit=1`,
+    `${SUPABASE_URL}/rest/v1/addresses?user_id=eq.${cust.user.id}&id=eq.ad000000-0000-0000-0000-000000000001`,
     {
       headers: {
         apikey: ANON_KEY,

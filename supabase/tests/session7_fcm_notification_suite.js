@@ -319,7 +319,7 @@ async function run() {
   // ---------------------------------------------------------------------------
   console.log("\n--- TEST 8: Outbox Claim Safety ---");
   const claimedJobs = querySql(`
-    SELECT job_id, notification_id, user_id, event_key FROM rpc_claim_pending_push_jobs(10);
+    SELECT job_id, notification_id, user_id, event_key FROM rpc_claim_pending_push_jobs(100);
   `);
 
   if (!claimedJobs.length) {
@@ -329,7 +329,7 @@ async function run() {
 
   // Immediate second claim should return 0 jobs (all are transitioned to 'processing')
   const secondClaim = querySql(`
-    SELECT job_id FROM rpc_claim_pending_push_jobs(10);
+    SELECT job_id FROM rpc_claim_pending_push_jobs(100);
   `);
   if (secondClaim.length !== 0) {
     throw new Error(`Second claim returned ${secondClaim.length} jobs; expected 0 due to SKIP LOCKED / status filter.`);

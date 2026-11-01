@@ -348,14 +348,14 @@ async function run() {
 
   // Get addresses and slots
   const addrARes = await restGet("addresses", custA.token);
-  const addressA = addrARes.data[0];
+  const addressA = addrARes.data.find((a) => a.id === "ad000000-0000-0000-0000-000000000001") || addrARes.data[0];
   const addrBRes = await restGet("addresses", custB.token);
-  const addressB = addrBRes.data[0];
+  const addressB = addrBRes.data.find((a) => a.id === "ad000000-0000-0000-0000-000000000002") || addrBRes.data[0];
   const slotRes = await restGet("delivery_slots?is_active=eq.true", custA.token);
   const validSlot = slotRes.data[0];
 
-  assert(addressA && addressA.id, "Customer A has valid address in Indiranagar");
-  assert(addressB && addressB.id, "Customer B has valid address in Koramangala");
+  assert(addressA && addressA.id, "Customer A has valid address in Agartala");
+  assert(addressB && addressB.id, "Customer B has valid address");
   assert(validSlot && validSlot.id, "Active delivery slot retrieved");
 
   // 4. Section 5: Checkout Quote Edge Function Tests

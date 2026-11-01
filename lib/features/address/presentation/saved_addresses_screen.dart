@@ -10,6 +10,7 @@ import '../../../core/widgets/feedback/app_empty_state.dart';
 import '../../../core/widgets/feedback/app_loading_indicator.dart';
 import '../../../shared/models/address.dart';
 import '../../../shared/providers/address_provider.dart';
+import '../../checkout/data/delivery_repository.dart';
 
 class SavedAddressesScreen extends ConsumerWidget {
   const SavedAddressesScreen({super.key});
@@ -167,41 +168,103 @@ class SavedAddressesScreen extends ConsumerWidget {
                 ),
               const SizedBox(width: 6),
 
-              // Map Verified Badge
-              if (isVerified)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.success.withValues(alpha: 0.12),
-                    borderRadius: AppDimensions.roundedPill,
-                    border: Border.all(
-                      color: AppColors.success.withValues(alpha: 0.3),
-                      width: 0.8,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(
-                        Icons.check_circle_rounded,
-                        size: 10,
-                        color: AppColors.success,
+              // Serviceability & Map Status Badges
+              Consumer(
+                builder: (context, ref, _) {
+                  if (!isVerified) {
+                    return InkWell(
+                      onTap: () => context.push(
+                        '${AppRoutes.editAddressPrefix}/${address.id}/edit',
                       ),
-                      SizedBox(width: 3),
-                      Text(
-                        'MAP VERIFIED',
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.success,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.warning.withValues(alpha: 0.12),
+                          borderRadius: AppDimensions.roundedPill,
+                          border: Border.all(
+                            color: AppColors.warning.withValues(alpha: 0.3),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.pin_drop_rounded,
+                              size: 10,
+                              color: AppColors.warning,
+                            ),
+                            SizedBox(width: 3),
+                            Text(
+                              'VERIFY ON MAP',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.warning,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
+                    );
+                  }
+
+                  final servAsync = ref.watch(
+                    addressServiceabilityProvider(address),
+                  );
+                  final serv = servAsync.value;
+                  final isServiceable = serv?.serviceable ?? false;
+
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isServiceable
+                          ? AppColors.success.withValues(alpha: 0.12)
+                          : AppColors.error.withValues(alpha: 0.12),
+                      borderRadius: AppDimensions.roundedPill,
+                      border: Border.all(
+                        color: isServiceable
+                            ? AppColors.success.withValues(alpha: 0.3)
+                            : AppColors.error.withValues(alpha: 0.3),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isServiceable
+                              ? Icons.check_circle_rounded
+                              : Icons.cancel_rounded,
+                          size: 10,
+                          color: isServiceable
+                              ? AppColors.success
+                              : AppColors.error,
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          isServiceable
+                              ? 'DELIVERY AVAILABLE'
+                              : 'OUTSIDE DELIVERY AREA',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: isServiceable
+                                ? AppColors.success
+                                : AppColors.error,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
 
               const Spacer(),
 

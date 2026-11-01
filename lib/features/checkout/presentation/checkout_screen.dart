@@ -238,12 +238,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       );
     }
 
-    final serviceAreaAsync = selectedAddress != null
-        ? ref.watch(serviceAreaByPincodeProvider(selectedAddress.pincode))
+    final serviceabilityAsync = selectedAddress != null
+        ? ref.watch(addressServiceabilityProvider(selectedAddress))
         : null;
 
-    final isServiceable = serviceAreaAsync?.value != null;
-    final isCheckingServiceability = serviceAreaAsync?.isLoading ?? false;
+    final serviceability = serviceabilityAsync?.value;
+    final isServiceable = serviceability?.serviceable ?? false;
+    final isCheckingServiceability = serviceabilityAsync?.isLoading ?? false;
 
     // Server Authoritative Quote
     final quoteAsync = ref.watch(
@@ -546,28 +547,99 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                                     )
                                   else if (!isServiceable)
                                     Container(
-                                      padding: const EdgeInsets.all(8),
+                                      padding: const EdgeInsets.all(10),
                                       decoration: BoxDecoration(
                                         color: AppColors.errorContainer,
                                         borderRadius: AppDimensions.roundedSm,
                                       ),
-                                      child: Row(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
-                                          const Icon(
-                                            Icons.error_outline_rounded,
-                                            color: AppColors.error,
-                                            size: 16,
-                                          ),
-                                          const SizedBox(width: 6),
-                                          Expanded(
-                                            child: Text(
-                                              'FreshMarket does not deliver to PIN code ${selectedAddress.pincode} yet.',
-                                              style: const TextStyle(
+                                          Row(
+                                            children: const [
+                                              Icon(
+                                                Icons.error_outline_rounded,
                                                 color: AppColors.error,
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w600,
+                                                size: 16,
                                               ),
-                                            ),
+                                              SizedBox(width: 6),
+                                              Expanded(
+                                                child: Text(
+                                                  'We currently deliver only within Agartala city. Choose another address.',
+                                                  style: TextStyle(
+                                                    color: AppColors.error,
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Row(
+                                            children: [
+                                              OutlinedButton.icon(
+                                                style: OutlinedButton.styleFrom(
+                                                  foregroundColor:
+                                                      AppColors.error,
+                                                  side: const BorderSide(
+                                                    color: AppColors.error,
+                                                  ),
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 4,
+                                                      ),
+                                                  visualDensity:
+                                                      VisualDensity.compact,
+                                                ),
+                                                onPressed: () => context.push(
+                                                  AppRoutes.addresses,
+                                                ),
+                                                icon: const Icon(
+                                                  Icons.swap_horiz_rounded,
+                                                  size: 14,
+                                                ),
+                                                label: const Text(
+                                                  'Change Address',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              OutlinedButton.icon(
+                                                style: OutlinedButton.styleFrom(
+                                                  foregroundColor:
+                                                      AppColors.error,
+                                                  side: const BorderSide(
+                                                    color: AppColors.error,
+                                                  ),
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 4,
+                                                      ),
+                                                  visualDensity:
+                                                      VisualDensity.compact,
+                                                ),
+                                                onPressed: () => context.push(
+                                                  '${AppRoutes.editAddressPrefix}/${selectedAddress.id}/edit',
+                                                ),
+                                                icon: const Icon(
+                                                  Icons
+                                                      .edit_location_alt_rounded,
+                                                  size: 14,
+                                                ),
+                                                label: const Text(
+                                                  'Edit on Map',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ],
                                       ),
@@ -576,7 +648,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                                     Container(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 8,
-                                        vertical: 4,
+                                        vertical: 6,
                                       ),
                                       decoration: BoxDecoration(
                                         color: AppColors.successContainer,
@@ -592,11 +664,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                                           const SizedBox(width: 6),
                                           Expanded(
                                             child: Text(
-                                              'Serviceable (${serviceAreaAsync?.value?.areaName ?? 'Bengaluru'}) • Free delivery on orders over ₹${serviceAreaAsync?.value?.minOrderForFreeDelivery.toInt() ?? 499}',
+                                              'Delivering within ${serviceability?.zoneName ?? 'Agartala'} • Verified on Map',
                                               style: const TextStyle(
                                                 color: AppColors.success,
                                                 fontSize: 11,
-                                                fontWeight: FontWeight.w600,
+                                                fontWeight: FontWeight.w700,
                                               ),
                                             ),
                                           ),
@@ -1312,6 +1384,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       buttonAction = () => context.push(
         '${AppRoutes.editAddressPrefix}/${selectedAddress.id}/edit',
       );
+    } else if (selectedAddress != null && !isServiceable) {
+      subtitle = 'Outside Agartala City';
+      displayAmount =
+          '${AppStrings.currencySymbol}${grandTotalDisplay.toStringAsFixed(0)}';
+      buttonLabel = 'Choose Another Address';
+      buttonIcon = Icons.location_off_rounded;
+      buttonAction = () => context.push(AppRoutes.addresses);
     } else if (isWalletOnly) {
       subtitle = 'Covered by Wallet';
       displayAmount =
