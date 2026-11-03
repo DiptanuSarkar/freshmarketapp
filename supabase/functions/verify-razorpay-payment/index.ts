@@ -1,6 +1,7 @@
 import { corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/keys.ts";
 import { createCustomerNotification } from "../_shared/notifications.ts";
+import { createTransactionalEmailJob } from "../_shared/emails.ts";
 
 function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -423,6 +424,22 @@ Deno.serve(async (req: Request) => {
       },
       eventKey: `payment:${razorpay_payment_id}:completed`,
     });
+
+    if (user.email) {
+      await createTransactionalEmailJob(adminClient, {
+        userId: user.id,
+        recipientEmail: user.email,
+        eventType: "payment_successful",
+        templateKey: "payment_successful",
+        eventKey: `email:payment:${razorpay_payment_id}:completed`,
+        payload: {
+          order_id: internal_order_id,
+          order_number: order.order_number,
+          total: order.total,
+          payment_id: razorpay_payment_id,
+        },
+      });
+    }
 
     return new Response(
       JSON.stringify({

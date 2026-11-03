@@ -87,7 +87,7 @@ const { execSync } = require("child_process");
 
 function querySql(sql) {
   const sanitized = sql.replace(/"/g, '\\"');
-  const res = execSync(`npx supabase db query --linked "${sanitized}"`, {
+  const res = execSync(`npx supabase db query --linked --yes "${sanitized}"`, {
     cwd: path.resolve(__dirname, "../.."),
     encoding: "utf8",
   });

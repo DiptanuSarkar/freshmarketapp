@@ -5,7 +5,11 @@ import '../../../core/supabase/supabase_client_provider.dart';
 import '../../../core/supabase/supabase_exception_mapper.dart';
 import '../../../core/supabase/supabase_tables.dart';
 
+import '../../../shared/models/app_support_config.dart';
+
 abstract class ISupportRepository {
+  Future<AppSupportConfig> getSupportConfig();
+
   Future<void> submitContactMessage({
     required String name,
     String? email,
@@ -19,6 +23,19 @@ class SupabaseSupportRepository implements ISupportRepository {
   SupabaseSupportRepository(this._supabase);
 
   final SupabaseClient _supabase;
+
+  @override
+  Future<AppSupportConfig> getSupportConfig() async {
+    try {
+      final res = await _supabase.rpc('rpc_get_support_config');
+      if (res != null && res is Map<String, dynamic>) {
+        return AppSupportConfig.fromJson(res);
+      }
+      return AppSupportConfig.defaults;
+    } catch (_) {
+      return AppSupportConfig.defaults;
+    }
+  }
 
   @override
   Future<void> submitContactMessage({
@@ -54,4 +71,9 @@ class SupabaseSupportRepository implements ISupportRepository {
 final supportRepositoryProvider = Provider<ISupportRepository>((ref) {
   final supabase = ref.watch(supabaseClientProvider);
   return SupabaseSupportRepository(supabase);
+});
+
+final supportConfigProvider = FutureProvider<AppSupportConfig>((ref) async {
+  final repo = ref.watch(supportRepositoryProvider);
+  return repo.getSupportConfig();
 });

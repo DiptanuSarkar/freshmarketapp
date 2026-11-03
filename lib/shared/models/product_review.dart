@@ -5,6 +5,7 @@ class ProductReview {
     required this.userId,
     this.authorName = 'Verified Buyer',
     required this.rating,
+    this.title,
     this.reviewText,
     this.isVerifiedPurchase = false,
     required this.createdAt,
@@ -15,6 +16,7 @@ class ProductReview {
   final String userId;
   final String authorName;
   final int rating;
+  final String? title;
   final String? reviewText;
   final bool isVerifiedPurchase;
   final DateTime createdAt;
@@ -30,9 +32,34 @@ class ProductReview {
       userId: json['user_id'] as String,
       authorName: author,
       rating: json['rating'] as int? ?? 5,
+      title: json['title'] as String?,
       reviewText: json['review_text'] as String?,
       isVerifiedPurchase: json['is_verified_purchase'] as bool? ?? false,
       createdAt: DateTime.parse(json['created_at'] as String),
+    );
+  }
+
+  ProductReview copyWith({
+    String? id,
+    String? productId,
+    String? userId,
+    String? authorName,
+    int? rating,
+    String? title,
+    String? reviewText,
+    bool? isVerifiedPurchase,
+    DateTime? createdAt,
+  }) {
+    return ProductReview(
+      id: id ?? this.id,
+      productId: productId ?? this.productId,
+      userId: userId ?? this.userId,
+      authorName: authorName ?? this.authorName,
+      rating: rating ?? this.rating,
+      title: title ?? this.title,
+      reviewText: reviewText ?? this.reviewText,
+      isVerifiedPurchase: isVerifiedPurchase ?? this.isVerifiedPurchase,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 }

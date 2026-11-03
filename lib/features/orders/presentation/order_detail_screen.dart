@@ -1,29 +1,41 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../app/app_routes.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/widgets/feedback/app_error_widget.dart';
 import '../../../core/widgets/feedback/app_loading_indicator.dart';
+import '../../../shared/models/app_support_config.dart';
 import '../../../shared/models/order.dart';
+import '../../../shared/providers/cart_provider.dart';
 import '../../checkout/data/checkout_repository.dart';
 import '../../payment/presentation/providers/razorpay_controller.dart';
+import '../../support/data/support_repository.dart';
 import '../../wallet/data/wallet_repository.dart';
 import '../data/orders_repository.dart';
 import '../data/refund_repository.dart';
 import 'widgets/order_status_timeline.dart';
 
-class OrderDetailScreen extends ConsumerWidget {
+class OrderDetailScreen extends ConsumerStatefulWidget {
   const OrderDetailScreen({super.key, required this.orderId});
 
   final String orderId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final orderAsync = ref.watch(orderDetailProvider(orderId));
+  ConsumerState<OrderDetailScreen> createState() => _OrderDetailScreenState();
+}
+
+class _OrderDetailScreenState extends ConsumerState<OrderDetailScreen> {
+  bool _isRepeatingOrder = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final orderAsync = ref.watch(orderDetailProvider(widget.orderId));
 
     return orderAsync.when(
       loading: () => Scaffold(
@@ -37,7 +49,7 @@ class OrderDetailScreen extends ConsumerWidget {
         body: AppErrorWidget(
           title: "Couldn't load order",
           message: 'Please check your connection and try again.',
-          onRetry: () => ref.refresh(orderDetailProvider(orderId)),
+          onRetry: () => ref.refresh(orderDetailProvider(widget.orderId)),
         ),
       ),
       data: (order) {
@@ -46,7 +58,7 @@ class OrderDetailScreen extends ConsumerWidget {
             appBar: AppBar(title: const Text('Order Details')),
             body: AppErrorWidget(
               title: 'Order not found',
-              message: 'Could not find details for order #$orderId.',
+              message: 'Could not find details for order #${widget.orderId}.',
               retryLabel: 'Go Back',
               onRetry: () => Navigator.pop(context),
             ),
@@ -716,6 +728,125 @@ class OrderDetailScreen extends ConsumerWidget {
                     ),
                   ),
                 ],
+
+                // Repeat Order Action
+                const SizedBox(height: AppDimensions.lg),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: AppDimensions.roundedMd,
+                      ),
+                    ),
+                    onPressed: _isRepeatingOrder
+                        ? null
+                        : () => _handleRepeatOrder(order),
+                    icon: _isRepeatingOrder
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation(Colors.white),
+                            ),
+                          )
+                        : const Icon(Icons.repeat_rounded, size: 18),
+                    label: Text(
+                      _isRepeatingOrder
+                          ? 'Checking Stock & Current Prices...'
+                          : 'Repeat Order',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+
+                // WhatsApp Support Card (Order-specific assistance)
+                const SizedBox(height: AppDimensions.md),
+                Container(
+                  padding: const EdgeInsets.all(AppDimensions.md),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE8F5E9),
+                    borderRadius: AppDimensions.roundedMd,
+                    border: Border.all(color: const Color(0xFFC8E6C9)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF25D366),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.chat_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: AppDimensions.md),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Need help with this order?',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF1B5E20),
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Chat directly with our butchery care team on WhatsApp.',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Color(0xFF2E7D32),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF25D366),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          elevation: 0,
+                        ),
+                        onPressed: () {
+                          final supportConfig =
+                              ref.read(supportConfigProvider).value ??
+                              AppSupportConfig.defaults;
+                          supportConfig.launchWhatsApp(
+                            context,
+                            'Hello FreshMarket Support, I need help with order #${order.orderNumber}.',
+                          );
+                        },
+                        child: const Text(
+                          'WhatsApp',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 const SizedBox(height: AppDimensions.xl),
               ],
             ),
@@ -723,6 +854,61 @@ class OrderDetailScreen extends ConsumerWidget {
         );
       },
     );
+  }
+
+  Future<void> _handleRepeatOrder(CustomerOrder order) async {
+    setState(() => _isRepeatingOrder = true);
+    try {
+      final repo = ref.read(ordersRepositoryProvider);
+      final result = await repo.repeatOrder(order);
+      await ref.read(cartProvider.notifier).loadCart();
+
+      if (!mounted) return;
+      setState(() => _isRepeatingOrder = false);
+
+      if (result.addedCount > 0) {
+        String msg =
+            'Added ${result.addedCount} item(s) to your cart with current prices.';
+        if (result.unavailableCount > 0) {
+          msg +=
+              ' (${result.unavailableCount} item(s) currently out of stock or inactive)';
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: AppColors.success,
+            duration: const Duration(seconds: 3),
+            action: SnackBarAction(
+              label: 'View Cart',
+              textColor: Colors.white,
+              onPressed: () => context.push(AppRoutes.cart),
+            ),
+          ),
+        );
+        context.push(AppRoutes.cart);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result.unavailableItems.isNotEmpty
+                  ? 'All items from this order are currently unavailable: ${result.unavailableItems.join(", ")}'
+                  : 'Items from this order could not be re-ordered at this time.',
+            ),
+            backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isRepeatingOrder = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to repeat order: $e'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
   }
 
   Widget _buildPriceRow(

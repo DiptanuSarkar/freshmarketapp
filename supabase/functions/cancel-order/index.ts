@@ -1,6 +1,7 @@
 import { corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/keys.ts";
 import { createCustomerNotification } from "../_shared/notifications.ts";
+import { createTransactionalEmailJob } from "../_shared/emails.ts";
 
 function mapCancelError(errorMsg: string): { code: string; message: string } {
   if (errorMsg.includes("ORDER_NOT_FOUND")) {
@@ -245,6 +246,22 @@ Deno.serve(async (req: Request) => {
           },
           eventKey: `refund:${refundResult.refund_id}:initiated`,
         });
+
+        if (user.email) {
+          await createTransactionalEmailJob(adminClient, {
+            userId: user.id,
+            recipientEmail: user.email,
+            eventType: "order_cancelled",
+            templateKey: "order_cancelled",
+            eventKey: `email:order:${orderId}:cancelled`,
+            payload: {
+              order_id: orderId,
+              order_number: refundResult.order_number || orderId,
+              reason: reason,
+              refund_id: refundResult.refund_id,
+            },
+          });
+        }
       }
 
       return new Response(JSON.stringify(refundResult), {
@@ -277,6 +294,21 @@ Deno.serve(async (req: Request) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
+    }
+
+    if (user.email && cancelResult && cancelResult.success) {
+      await createTransactionalEmailJob(adminClient, {
+        userId: user.id,
+        recipientEmail: user.email,
+        eventType: "order_cancelled",
+        templateKey: "order_cancelled",
+        eventKey: `email:order:${orderId}:cancelled`,
+        payload: {
+          order_id: orderId,
+          order_number: cancelResult.order_number || orderId,
+          reason: reason,
+        },
+      });
     }
 
     return new Response(JSON.stringify(cancelResult), {

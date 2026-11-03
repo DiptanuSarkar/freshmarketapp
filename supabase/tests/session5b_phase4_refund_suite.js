@@ -45,7 +45,7 @@ function querySql(sql) {
   const noComments = sql.replace(/--.*$/gm, '');
   const sanitized = noComments.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim().replace(/"/g, '\\"');
   try {
-    const res = execSync(`npx supabase db query --linked "${sanitized}"`, {
+    const res = execSync(`npx supabase db query --linked --yes "${sanitized}"`, {
       cwd: path.resolve(__dirname, "../.."),
       encoding: "utf8",
     });

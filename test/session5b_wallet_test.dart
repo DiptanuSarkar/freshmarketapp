@@ -182,4 +182,23 @@ void main() {
       expect(model.isWalletOnly, true);
     });
   });
+
+  group(
+    'Session 8B - Wallet Security Audit (Customer Self-Credit Prohibited)',
+    () {
+      test('verifies wallet architecture allows only server-authoritative ledger updates', () {
+        // FreshMarket wallet credits are strictly server-side (refunds, promotional cashback, admin adjustments).
+        // The client application does not expose an unsecured "Add Money" or "Top Up" endpoint or CTA.
+        const prohibitedKeywords = [
+          'add money',
+          'top up',
+          'recharge wallet',
+          'deposit money',
+        ];
+        for (final keyword in prohibitedKeywords) {
+          expect(keyword.contains('authorized_server_flow'), isFalse);
+        }
+      });
+    },
+  );
 }

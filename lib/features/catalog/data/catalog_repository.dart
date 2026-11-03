@@ -6,6 +6,7 @@ import '../../../core/supabase/supabase_exception_mapper.dart';
 import '../../../core/supabase/supabase_tables.dart';
 import '../../../shared/models/category.dart';
 import '../../../shared/models/product.dart';
+import '../../../shared/models/product_rating_summary.dart';
 import '../../../shared/models/product_review.dart';
 import '../../../shared/models/product_variant.dart';
 
@@ -20,6 +21,15 @@ abstract interface class ICatalogRepository {
   Future<Product?> getProductById(String id);
   Future<List<Product>> searchProducts(String query);
   Future<List<ProductReview>> getProductReviews(String productId);
+  Future<ProductRatingSummary> getProductRatingSummary(String productId);
+  Future<Map<String, dynamic>> checkReviewEligibility(String productId);
+  Future<Map<String, dynamic>> submitProductReview({
+    required String productId,
+    required int rating,
+    String? title,
+    String? reviewText,
+  });
+  Future<void> deleteProductReview(String reviewId);
   Future<List<Product>> getActiveProducts({String? categorySlug});
 }
 
@@ -182,6 +192,7 @@ class SupabaseCatalogRepository implements ICatalogRepository {
             product_id,
             user_id,
             rating,
+            title,
             review_text,
             is_verified_purchase,
             created_at,
@@ -197,6 +208,76 @@ class SupabaseCatalogRepository implements ICatalogRepository {
       return list
           .map((item) => ProductReview.fromJson(item as Map<String, dynamic>))
           .toList();
+    } catch (e) {
+      throw SupabaseExceptionMapper.map(e);
+    }
+  }
+
+  @override
+  Future<ProductRatingSummary> getProductRatingSummary(String productId) async {
+    try {
+      final res = await _supabase.rpc(
+        'rpc_get_product_rating_summary',
+        params: {'p_product_id': productId},
+      );
+      if (res != null && res is Map<String, dynamic>) {
+        return ProductRatingSummary.fromJson(res);
+      }
+      return ProductRatingSummary.empty;
+    } catch (e) {
+      return ProductRatingSummary.empty;
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> checkReviewEligibility(String productId) async {
+    try {
+      final res = await _supabase.rpc(
+        'rpc_check_review_eligibility',
+        params: {'p_product_id': productId},
+      );
+      if (res != null && res is Map<String, dynamic>) {
+        return res;
+      }
+      return {'is_eligible': false, 'reason': 'Unknown response'};
+    } catch (e) {
+      return {'is_eligible': false, 'reason': e.toString()};
+    }
+  }
+
+  @override
+  Future<Map<String, dynamic>> submitProductReview({
+    required String productId,
+    required int rating,
+    String? title,
+    String? reviewText,
+  }) async {
+    try {
+      final res = await _supabase.rpc(
+        'rpc_submit_product_review',
+        params: {
+          'p_product_id': productId,
+          'p_rating': rating,
+          'p_title': title,
+          'p_review_text': reviewText,
+        },
+      );
+      if (res != null && res is Map<String, dynamic>) {
+        return res;
+      }
+      return {'success': true};
+    } catch (e) {
+      throw SupabaseExceptionMapper.map(e);
+    }
+  }
+
+  @override
+  Future<void> deleteProductReview(String reviewId) async {
+    try {
+      await _supabase.rpc(
+        'rpc_delete_product_review',
+        params: {'p_review_id': reviewId},
+      );
     } catch (e) {
       throw SupabaseExceptionMapper.map(e);
     }
@@ -388,3 +469,21 @@ final catalogProductByIdProvider = FutureProvider.family<Product?, String>((
   final repo = ref.watch(catalogRepositoryProvider);
   return repo.getProductById(productId);
 });
+
+final productRatingSummaryProvider =
+    FutureProvider.family<ProductRatingSummary, String>((ref, productId) async {
+      final repo = ref.watch(catalogRepositoryProvider);
+      return repo.getProductRatingSummary(productId);
+    });
+
+final productReviewEligibilityProvider =
+    FutureProvider.family<Map<String, dynamic>, String>((ref, productId) async {
+      final repo = ref.watch(catalogRepositoryProvider);
+      return repo.checkReviewEligibility(productId);
+    });
+
+final productReviewsProvider =
+    FutureProvider.family<List<ProductReview>, String>((ref, productId) async {
+      final repo = ref.watch(catalogRepositoryProvider);
+      return repo.getProductReviews(productId);
+    });

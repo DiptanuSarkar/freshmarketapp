@@ -41,7 +41,7 @@ function generateUuidV4() {
 
 function querySql(sql) {
   const sanitized = sql.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim().replace(/"/g, '\\"');
-  const res = execSync(`npx supabase db query --linked "${sanitized}"`, {
+  const res = execSync(`npx supabase db query --linked --yes "${sanitized}"`, {
     cwd: path.resolve(__dirname, "../.."),
     encoding: "utf8",
   });

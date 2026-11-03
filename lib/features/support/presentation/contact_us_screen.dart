@@ -5,6 +5,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/widgets/buttons/app_button.dart';
 import '../../../core/widgets/inputs/app_text_field.dart';
+import '../../../shared/models/app_support_config.dart';
 import '../../profile/data/profile_repository.dart';
 import '../data/support_repository.dart';
 
@@ -99,6 +100,9 @@ class _ContactUsScreenState extends ConsumerState<ContactUsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final supportConfig =
+        ref.watch(supportConfigProvider).value ?? AppSupportConfig.defaults;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Customer Care & Support')),
@@ -154,16 +158,10 @@ class _ContactUsScreenState extends ConsumerState<ContactUsScreen> {
                         ),
                         const SizedBox(height: 8),
                         InkWell(
-                          onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'WhatsApp click-to-chat ready with support number +91 98765 00000',
-                                ),
-                                backgroundColor: Color(0xFF2E7D32),
-                              ),
-                            );
-                          },
+                          onTap: () => supportConfig.launchWhatsApp(
+                            context,
+                            'Hello FreshMarket Support, I need help with my account/order.',
+                          ),
                           child: const Row(
                             children: [
                               Text(
@@ -199,18 +197,24 @@ class _ContactUsScreenState extends ConsumerState<ContactUsScreen> {
                 borderRadius: AppDimensions.roundedMd,
                 border: Border.all(color: AppColors.surfaceBorder),
               ),
-              child: const Column(
+              child: Column(
                 children: [
                   _ContactRow(
                     icon: Icons.phone_in_talk_rounded,
                     title: 'Helpline Number',
-                    subtitle: '1800-419-MEAT (Toll Free, 6 AM - 10 PM)',
+                    subtitle:
+                        '${supportConfig.supportPhone} (${supportConfig.businessHours})',
+                    onTap: () => supportConfig.launchPhone(context),
                   ),
-                  Divider(height: AppDimensions.lg),
+                  const Divider(height: AppDimensions.lg),
                   _ContactRow(
                     icon: Icons.email_outlined,
                     title: 'Email Inquiries',
-                    subtitle: 'care@freshmarket.in (24hr response)',
+                    subtitle: '${supportConfig.supportEmail} (24hr response)',
+                    onTap: () => supportConfig.launchEmail(
+                      context,
+                      'FreshMarket Customer Inquiry',
+                    ),
                   ),
                 ],
               ),
@@ -323,49 +327,64 @@ class _ContactRow extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
+    this.onTap,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppColors.primaryContainer,
-            borderRadius: AppDimensions.roundedSm,
-          ),
-          child: Icon(icon, color: AppColors.primary, size: 20),
-        ),
-        const SizedBox(width: AppDimensions.md),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: AppDimensions.roundedSm,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.primaryContainer,
+                borderRadius: AppDimensions.roundedSm,
               ),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: AppColors.textSecondary,
-                ),
+              child: Icon(icon, color: AppColors.primary, size: 20),
+            ),
+            const SizedBox(width: AppDimensions.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+            if (onTap != null)
+              const Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14,
+                color: AppColors.textTertiary,
+              ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

@@ -1,6 +1,7 @@
 import { corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient, createUserClient } from "../_shared/keys.ts";
 import { createCustomerNotification } from "../_shared/notifications.ts";
+import { createTransactionalEmailJob } from "../_shared/emails.ts";
 
 function mapErrorToResponse(errorMsg: string): { code: string; message: string } {
   if (errorMsg.includes("EMPTY_CART")) {
@@ -390,6 +391,23 @@ Deno.serve(async (req: Request) => {
         },
         eventKey: `order:${orderData.id}:confirmed`,
       });
+
+      if (user.email) {
+        await createTransactionalEmailJob(adminClient, {
+          userId: user.id,
+          recipientEmail: user.email,
+          eventType: "order_confirmed",
+          templateKey: "order_confirmed",
+          eventKey: `email:order:${orderData.id}:confirmed`,
+          payload: {
+            order_id: orderData.id,
+            order_number: orderData.order_number,
+            total: orderData.total,
+            payment_method: "WALLET",
+            status: "confirmed",
+          },
+        });
+      }
     }
 
     return new Response(

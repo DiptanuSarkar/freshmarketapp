@@ -2,15 +2,19 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../../app/app_routes.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimensions.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/supabase/supabase_client_provider.dart';
 import '../../../core/widgets/buttons/app_button.dart';
 import '../../../core/widgets/feedback/app_error_widget.dart';
 import '../../../core/widgets/feedback/app_loading_indicator.dart';
 import '../../../shared/models/product.dart';
+import '../../../shared/models/product_rating_summary.dart';
+import '../../../shared/models/product_review.dart';
 import '../../../shared/models/product_variant.dart';
 import '../../../shared/providers/cart_provider.dart';
 import '../../../shared/providers/wishlist_provider.dart';
@@ -97,6 +101,22 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         _selectedVariant ??= product.defaultVariant;
         final isFav = ref.watch(wishlistProvider).contains(product.id);
         final cartNotifier = ref.read(cartProvider.notifier);
+        final ratingSummary =
+            ref.watch(productRatingSummaryProvider(widget.productId)).value ??
+            ProductRatingSummary.empty;
+        final avgRating = ratingSummary.reviewCount > 0
+            ? ratingSummary.averageRating
+            : product.rating;
+        final totalReviews = ratingSummary.reviewCount > 0
+            ? ratingSummary.reviewCount
+            : product.reviewCount;
+        final eligibilityAsync = ref.watch(
+          productReviewEligibilityProvider(widget.productId),
+        );
+        final reviewsAsync = ref.watch(
+          productReviewsProvider(widget.productId),
+        );
+        final currentUser = ref.watch(currentUserProvider);
 
         return Scaffold(
           backgroundColor: AppColors.background,
@@ -179,7 +199,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                       ),
                                       const SizedBox(width: 3),
                                       Text(
-                                        product.rating.toStringAsFixed(1),
+                                        avgRating.toStringAsFixed(1),
                                         style: const TextStyle(
                                           fontSize: 11,
                                           fontWeight: FontWeight.w800,
@@ -187,7 +207,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                         ),
                                       ),
                                       Text(
-                                        ' (${product.reviewCount})',
+                                        ' ($totalReviews)',
                                         style: const TextStyle(
                                           fontSize: 10,
                                           color: AppColors.textSecondary,
@@ -544,6 +564,19 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                             ],
                           ),
                         ),
+                      const SizedBox(height: AppDimensions.md),
+
+                      // Customer Reviews Section
+                      _buildReviewsSection(
+                        context,
+                        product,
+                        ratingSummary,
+                        avgRating,
+                        totalReviews,
+                        eligibilityAsync,
+                        reviewsAsync,
+                        currentUser,
+                      ),
                       const SizedBox(height: AppDimensions.xxxl),
                     ],
                   ),
@@ -742,5 +775,716 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildReviewsSection(
+    BuildContext context,
+    Product product,
+    ProductRatingSummary ratingSummary,
+    double avgRating,
+    int totalReviews,
+    AsyncValue<Map<String, dynamic>> eligibilityAsync,
+    AsyncValue<List<ProductReview>> reviewsAsync,
+    dynamic currentUser,
+  ) {
+    final eligibility = eligibilityAsync.value;
+    final isEligible = eligibility?['is_eligible'] == true;
+    final existingReview =
+        eligibility?['existing_review'] as Map<String, dynamic>?;
+
+    return Container(
+      color: AppColors.surface,
+      padding: const EdgeInsets.all(AppDimensions.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
+                children: [
+                  Icon(
+                    Icons.rate_review_rounded,
+                    size: 16,
+                    color: AppColors.primary,
+                  ),
+                  SizedBox(width: 6),
+                  Text(
+                    'Customer Reviews & Ratings',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              if (isEligible)
+                TextButton.icon(
+                  onPressed: () =>
+                      _showReviewBottomSheet(context, existingReview),
+                  icon: const Icon(Icons.edit_note_rounded, size: 16),
+                  label: Text(
+                    existingReview != null ? 'Edit Review' : 'Write Review',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: AppDimensions.md),
+
+          // Rating Score & Distribution Card
+          Container(
+            padding: const EdgeInsets.all(AppDimensions.md),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceSubtle,
+              borderRadius: AppDimensions.roundedMd,
+              border: Border.all(color: AppColors.surfaceBorder),
+            ),
+            child: Row(
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      avgRating.toStringAsFixed(1),
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    Row(
+                      children: List.generate(5, (index) {
+                        return Icon(
+                          index < avgRating.round()
+                              ? Icons.star_rounded
+                              : Icons.star_border_rounded,
+                          size: 16,
+                          color: AppColors.warning,
+                        );
+                      }),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '$totalReviews verified ratings',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: AppDimensions.lg),
+                Expanded(
+                  child: Column(
+                    children: [5, 4, 3, 2, 1].map((star) {
+                      final count = ratingSummary.breakdown[star] ?? 0;
+                      final ratio = totalReviews > 0
+                          ? (count / totalReviews)
+                          : 0.0;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 1.5),
+                        child: Row(
+                          children: [
+                            Text(
+                              '$star★',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(2),
+                                child: LinearProgressIndicator(
+                                  value: ratio,
+                                  minHeight: 4,
+                                  backgroundColor: AppColors.surfaceBorder,
+                                  valueColor: const AlwaysStoppedAnimation(
+                                    AppColors.warning,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            SizedBox(
+                              width: 20,
+                              child: Text(
+                                '$count',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: AppColors.textTertiary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppDimensions.md),
+
+          // Eligibility Banner for non-eligible users
+          if (!isEligible) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppDimensions.md,
+                vertical: AppDimensions.sm,
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceSubtle,
+                borderRadius: AppDimensions.roundedSm,
+                border: Border.all(color: AppColors.surfaceBorder),
+              ),
+              child: const Row(
+                children: [
+                  Icon(
+                    Icons.verified_user_outlined,
+                    size: 14,
+                    color: AppColors.textSecondary,
+                  ),
+                  SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Verified Purchase Reviews are enabled automatically after your order has been delivered fresh.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppDimensions.md),
+          ],
+
+          // Reviews List
+          reviewsAsync.when(
+            loading: () => const Center(
+              child: Padding(
+                padding: EdgeInsets.all(AppDimensions.md),
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+            error: (err, _) => Padding(
+              padding: const EdgeInsets.all(AppDimensions.md),
+              child: Text(
+                'Could not load reviews: $err',
+                style: const TextStyle(fontSize: 12, color: AppColors.error),
+              ),
+            ),
+            data: (reviews) {
+              if (reviews.isEmpty) {
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(AppDimensions.lg),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceSubtle,
+                    borderRadius: AppDimensions.roundedSm,
+                  ),
+                  child: const Column(
+                    children: [
+                      Icon(
+                        Icons.rate_review_outlined,
+                        size: 28,
+                        color: AppColors.textTertiary,
+                      ),
+                      SizedBox(height: 6),
+                      Text(
+                        'No customer reviews yet.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Order this fresh cut to be the first verified reviewer!',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textTertiary,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              return ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: reviews.length,
+                separatorBuilder: (context, index) =>
+                    const Divider(height: AppDimensions.lg),
+                itemBuilder: (context, index) {
+                  final review = reviews[index];
+                  final formattedDate = DateFormat('dd MMM yyyy')
+                      .format(review.createdAt);
+                  final isOwnReview =
+                      currentUser != null && review.userId == currentUser.id;
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Row(
+                                children: List.generate(5, (i) {
+                                  return Icon(
+                                    i < review.rating
+                                        ? Icons.star_rounded
+                                        : Icons.star_border_rounded,
+                                    size: 14,
+                                    color: AppColors.warning,
+                                  );
+                                }),
+                              ),
+                              const SizedBox(width: 8),
+                              if (review.isVerifiedPurchase)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE8F5E9),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: const Color(0xFFC8E6C9),
+                                    ),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.check_circle_rounded,
+                                        size: 11,
+                                        color: Color(0xFF2E7D32),
+                                      ),
+                                      SizedBox(width: 3),
+                                      Text(
+                                        'Verified Purchase',
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF1B5E20),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                          if (isOwnReview)
+                            PopupMenuButton<String>(
+                              icon: const Icon(
+                                Icons.more_vert,
+                                size: 16,
+                                color: AppColors.textTertiary,
+                              ),
+                              onSelected: (val) async {
+                                if (val == 'edit') {
+                                  _showReviewBottomSheet(context, {
+                                    'id': review.id,
+                                    'rating': review.rating,
+                                    'title': review.title,
+                                    'review_text': review.reviewText,
+                                  });
+                                } else if (val == 'delete') {
+                                  await _handleDeleteReview(context, review.id);
+                                }
+                              },
+                              itemBuilder: (ctx) => [
+                                const PopupMenuItem(
+                                  value: 'edit',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.edit, size: 16),
+                                      SizedBox(width: 8),
+                                      Text('Edit Review'),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'delete',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.delete,
+                                        size: 16,
+                                        color: AppColors.error,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'Delete Review',
+                                        style: TextStyle(
+                                          color: AppColors.error,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                        ],
+                      ),
+                      if (review.title != null && review.title!.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          review.title!,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ],
+                      if (review.reviewText != null &&
+                          review.reviewText!.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          review.reviewText!,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 4),
+                      Text(
+                        '${review.authorName} • $formattedDate',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: AppColors.textTertiary,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleDeleteReview(
+    BuildContext context,
+    String reviewId,
+  ) async {
+    try {
+      await ref.read(catalogRepositoryProvider).deleteProductReview(reviewId);
+      ref.invalidate(productRatingSummaryProvider(widget.productId));
+      ref.invalidate(productReviewsProvider(widget.productId));
+      ref.invalidate(productReviewEligibilityProvider(widget.productId));
+      ref.invalidate(catalogProductByIdProvider(widget.productId));
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Review deleted.'),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete review: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showReviewBottomSheet(
+    BuildContext context,
+    Map<String, dynamic>? existingReview,
+  ) {
+    int selectedRating = existingReview?['rating'] as int? ?? 5;
+    final titleController = TextEditingController(
+      text: existingReview?['title'] as String? ?? '',
+    );
+    final textController = TextEditingController(
+      text: existingReview?['review_text'] as String? ?? '',
+    );
+    bool isSubmitting = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: AppDimensions.lg,
+                right: AppDimensions.lg,
+                top: AppDimensions.lg,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + AppDimensions.lg,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          existingReview != null
+                              ? 'Edit Your Review'
+                              : 'Write a Product Review',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 20),
+                          onPressed: () => Navigator.pop(sheetContext),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppDimensions.xs),
+                    const Text(
+                      'Rate this fresh cut based on freshness, taste, and butchery quality.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: AppDimensions.md),
+
+                    // Star Rating Picker
+                    Center(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: List.generate(5, (idx) {
+                          final star = idx + 1;
+                          final isFilled = star <= selectedRating;
+                          return InkWell(
+                            onTap: isSubmitting
+                                ? null
+                                : () => setSheetState(
+                                    () => selectedRating = star,
+                                  ),
+                            borderRadius: BorderRadius.circular(20),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 4,
+                              ),
+                              child: Icon(
+                                isFilled
+                                    ? Icons.star_rounded
+                                    : Icons.star_border_rounded,
+                                size: 36,
+                                color: isFilled
+                                    ? AppColors.warning
+                                    : AppColors.textTertiary,
+                              ),
+                            ),
+                          );
+                        }),
+                      ),
+                    ),
+                    Center(
+                      child: Text(
+                        _getRatingLabel(selectedRating),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFFB45309),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppDimensions.md),
+
+                    // Review Title
+                    TextField(
+                      controller: titleController,
+                      enabled: !isSubmitting,
+                      decoration: const InputDecoration(
+                        labelText: 'Headline / Title (Optional)',
+                        hintText: 'e.g. Incredibly tender & fresh!',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: AppDimensions.sm),
+
+                    // Review Text
+                    TextField(
+                      controller: textController,
+                      enabled: !isSubmitting,
+                      maxLines: 4,
+                      decoration: const InputDecoration(
+                        labelText: 'Review Details (Optional)',
+                        hintText: 'Share details about freshness, cut precision, or your recipe experience...',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: AppDimensions.lg),
+
+                    // Submit Button
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: AppDimensions.roundedMd,
+                          ),
+                        ),
+                        onPressed: isSubmitting
+                            ? null
+                            : () async {
+                                setSheetState(() => isSubmitting = true);
+                                try {
+                                  await ref
+                                      .read(catalogRepositoryProvider)
+                                      .submitProductReview(
+                                        productId: widget.productId,
+                                        rating: selectedRating,
+                                        title:
+                                            titleController.text
+                                                .trim()
+                                                .isNotEmpty
+                                            ? titleController.text.trim()
+                                            : null,
+                                        reviewText:
+                                            textController.text
+                                                .trim()
+                                                .isNotEmpty
+                                            ? textController.text.trim()
+                                            : null,
+                                      );
+
+                                  ref.invalidate(
+                                    productRatingSummaryProvider(
+                                      widget.productId,
+                                    ),
+                                  );
+                                  ref.invalidate(
+                                    productReviewsProvider(widget.productId),
+                                  );
+                                  ref.invalidate(
+                                    productReviewEligibilityProvider(
+                                      widget.productId,
+                                    ),
+                                  );
+                                  ref.invalidate(
+                                    catalogProductByIdProvider(
+                                      widget.productId,
+                                    ),
+                                  );
+
+                                  if (sheetContext.mounted) {
+                                    Navigator.pop(sheetContext);
+                                  }
+
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          existingReview != null
+                                              ? 'Review updated successfully!'
+                                              : 'Thank you! Your verified review has been posted.',
+                                        ),
+                                        backgroundColor: AppColors.success,
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (sheetContext.mounted) {
+                                    setSheetState(() => isSubmitting = false);
+                                  }
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          'Failed to submit review: $e',
+                                        ),
+                                        backgroundColor: AppColors.error,
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                        child: isSubmitting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation(
+                                    Colors.white,
+                                  ),
+                                ),
+                              )
+                            : Text(
+                                existingReview != null
+                                    ? 'Update Review'
+                                    : 'Submit Review',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String _getRatingLabel(int rating) {
+    switch (rating) {
+      case 5:
+        return '5 Stars — Outstanding Freshness';
+      case 4:
+        return '4 Stars — Very Good Quality';
+      case 3:
+        return '3 Stars — Average Butchery';
+      case 2:
+        return '2 Stars — Below Expectations';
+      case 1:
+        return '1 Star — Unsatisfactory';
+      default:
+        return '$rating Stars';
+    }
   }
 }
