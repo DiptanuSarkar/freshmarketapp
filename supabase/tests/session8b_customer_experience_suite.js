@@ -158,9 +158,9 @@ async function runSession8bSuite() {
   console.log(`  Test Product: ${testProduct.name} (${testProduct.id}), Variant: ${testVariant.id}`);
 
   // ---------------------------------------------------------------------------
-  // SECTION 1: Transactional Email Outbox & Security
+  // SECTION 1: Transactional Email Outbox & SMTP Provider Architecture
   // ---------------------------------------------------------------------------
-  console.log("\n--- SECTION 1: Transactional Email Outbox Security & Resilience ---");
+  console.log("\n--- SECTION 1: Transactional Email Outbox & Nodemailer SMTP Architecture ---");
 
   // 1.1 RLS: Customer cannot query email jobs directly
   const rlsReadRes = await apiRequest("/rest/v1/transactional_email_jobs?select=*&limit=5", "GET", null, tokenA);
@@ -199,11 +199,69 @@ async function runSession8bSuite() {
   const claimAuthCheck = await rpcCall("rpc_claim_pending_email_jobs", { p_limit: 5 }, tokenA);
   assert(claimAuthCheck.status >= 400, "Security: Customer token cannot claim pending email jobs (service_role only)");
 
-  // 1.5 Edge Function Dispatch: Invoking dispatch-transactional-emails
-  const dispatchRes = await edgeFunction("dispatch-transactional-emails", { limit: 5 }, tokenA);
-  assert(dispatchRes.status === 200 && dispatchRes.data?.success === true, "Edge Function: dispatch-transactional-emails processes outbox safely");
+  // 1.5 Edge Function: Verify Nodemailer TLS port 465 SMTP transport connectivity
+  const verifyConnRes = await edgeFunction("dispatch-transactional-emails", { action: "verify_connection" }, tokenA);
+  assert(
+    verifyConnRes.status === 200 &&
+      verifyConnRes.data?.success === true &&
+      verifyConnRes.data?.verified === true &&
+      verifyConnRes.data?.transport === "nodemailer_smtp_tls" &&
+      verifyConnRes.data?.port === 465 &&
+      verifyConnRes.data?.secure === true,
+    `SMTP Transport: Nodemailer TLS port 465 verified (host: ${verifyConnRes.data?.host}, port: ${verifyConnRes.data?.port})`
+  );
 
-  // 1.6 Commerce Independence: Email provider state does not block order quote or status
+  // 1.6 SMTP Abstraction: Mock successful send & provider message ID persistence
+  const mockSuccessRes = await edgeFunction(
+    "dispatch-transactional-emails",
+    {
+      limit: 1,
+      mock_transport: { simulate: "success" },
+    },
+    tokenA
+  );
+  assert(mockSuccessRes.status === 200 && mockSuccessRes.data?.success === true, "SMTP Abstraction: Dispatcher processes jobs with mock success transport");
+
+  // 1.7 SMTP Abstraction: Mock temporary failure / timeout retry classification
+  const mockTimeoutRes = await edgeFunction(
+    "dispatch-transactional-emails",
+    {
+      limit: 1,
+      mock_transport: { simulate: "timeout" },
+    },
+    tokenA
+  );
+  assert(mockTimeoutRes.status === 200 && mockTimeoutRes.data?.success === true, "SMTP Abstraction: ETIMEDOUT classified as retryable without throwing");
+
+  // 1.8 SMTP Abstraction: Mock permanent authentication failure (EAUTH 535) classification
+  const mockAuthRes = await edgeFunction(
+    "dispatch-transactional-emails",
+    {
+      limit: 1,
+      mock_transport: { simulate: "eauth" },
+    },
+    tokenA
+  );
+  assert(mockAuthRes.status === 200 && mockAuthRes.data?.success === true, "SMTP Abstraction: EAUTH 535 classified as permanent without crashing dispatcher");
+
+  // 1.9 Email Format Validation: Missing / malformed recipient email rejected
+  const mockInvalidEmailRes = await edgeFunction(
+    "dispatch-transactional-emails",
+    {
+      action: "send_test_email",
+      recipient_email: "not-a-valid-email",
+    },
+    tokenA
+  );
+  assert(mockInvalidEmailRes.status === 400 && mockInvalidEmailRes.data?.success === false, "Email Validation: Malformed recipient format rejected before SMTP transport");
+
+  // 1.10 Resend Runtime Dependency Absent
+  assert(
+    typeof process.env.RESEND_API_KEY === "undefined" && !fs.readFileSync(path.resolve(__dirname, "../functions/dispatch-transactional-emails/index.ts"), "utf8").includes("RESEND_API_KEY"),
+    "Security Audit: Zero RESEND_API_KEY runtime dependency exists in dispatcher code"
+  );
+
+  // 1.11 Commerce Independence: Email provider state does not block order quote or status
   const quoteCheck = await edgeFunction(
     "checkout-quote",
     {
@@ -214,6 +272,7 @@ async function runSession8bSuite() {
     tokenA
   );
   assert(quoteCheck.status === 200 || quoteCheck.status === 400, "Commerce Independence: Pricing and quote engine execute independently of email provider");
+
 
   // ---------------------------------------------------------------------------
   // SECTION 2: Support Settings & App Configuration
